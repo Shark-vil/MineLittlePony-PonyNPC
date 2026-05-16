@@ -23,8 +23,9 @@
 hs_err_pid*
 replay_pid*
 
-# Gradle build output
+# Gradle build output and cache
 build/
+.gradle/
 
 # Local dependency jars (not published to VCS)
 libs/
