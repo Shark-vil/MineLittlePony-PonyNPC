@@ -6,8 +6,4 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-rootProject.name = 'minelittlepony'
-
-if (!settings.startParameter.projectProperties.containsKey('skipSubmod')) {
-    include ':submod-ponynpc'
-}
+rootProject.name = 'ponynpc'

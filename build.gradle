@@ -29,16 +29,15 @@ dependencies {
     // Full Fabric API (users have it installed anyway via MLP)
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    // MineLittlePony — ищем intermediary-jar, собранный шагом 1 (remapJar)
-    def mlpLibsDir = rootProject.file('build/libs')
-    def mlpJarFile = mlpLibsDir.exists() ? mlpLibsDir.listFiles()?.find { f ->
+    // MineLittlePony — remapped intermediary jar stored in libs/
+    def mlpJarFile = fileTree('libs').find { f ->
         f.name.startsWith('minelittlepony-') && f.name.endsWith('.jar') &&
         !f.name.contains('-dev.') && !f.name.contains('-sources.')
-    } : null
+    }
     if (mlpJarFile != null) {
-        modCompileOnly(files(mlpJarFile))
+        compileOnly(files(mlpJarFile))
     } else {
-        logger.warn('[PonyNPC] MineLittlePony jar not found — run step 1 of build-ponynpc.bat first')
+        logger.warn('[PonyNPC] MineLittlePony jar not found in libs/ — place the remapped MLP jar there')
     }
     // MSON и Kirin нужны компилятору (transitively через MLP)
     modCompileOnly "com.minelittlepony:mson:${project.mson_version}"
