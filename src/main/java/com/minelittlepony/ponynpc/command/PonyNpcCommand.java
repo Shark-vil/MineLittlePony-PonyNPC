@@ -1,5 +1,6 @@
 package com.minelittlepony.ponynpc.command;
 
+import com.minelittlepony.ponynpc.PonyNpcMod;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
@@ -23,7 +24,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
-import java.util.List;
 
 import static net.minecraft.server.command.CommandManager.*;
 
@@ -39,6 +39,15 @@ public final class PonyNpcCommand {
         return builder.buildFuture();
     };
 
+    /** Suggests built-in skin short names (e.g. "applejack") discovered at startup. */
+    private static final SuggestionProvider<ServerCommandSource> SKIN_SUGGESTIONS = (ctx, builder) -> {
+        String remaining = builder.getRemaining();
+        PonyNpcMod.BUILTIN_SKIN_NAMES.stream()
+            .filter(name -> name.startsWith(remaining))
+            .forEach(builder::suggest);
+        return builder.buildFuture();
+    };
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             register(dispatcher, registryAccess)
@@ -48,24 +57,37 @@ public final class PonyNpcCommand {
     private static void register(CommandDispatcher<ServerCommandSource> dispatcher,
                                   CommandRegistryAccess registryAccess) {
         dispatcher.register(literal("ponynpc")
-            // Только операторы (уровень 2)
             .requires(source -> source.hasPermissionLevel(2))
 
             .then(literal("spawn")
                 .then(argument("dialog_id", StringArgumentType.string())
                     .suggests(DIALOG_SUGGESTIONS)
                     .executes(ctx -> spawnNpc(ctx,
-                        StringArgumentType.getString(ctx, "dialog_id"), "", ""))
+                        StringArgumentType.getString(ctx, "dialog_id"), "", "", false))
+
                     .then(argument("skin", StringArgumentType.string())
+                        .suggests(SKIN_SUGGESTIONS)
                         .executes(ctx -> spawnNpc(ctx,
                             StringArgumentType.getString(ctx, "dialog_id"),
-                            StringArgumentType.getString(ctx, "skin"), ""))
+                            StringArgumentType.getString(ctx, "skin"), "", false))
+
+                        // stationary flag as literal keyword (before name, so name can remain greedy)
+                        .then(literal("stationary")
+                            .executes(ctx -> spawnNpc(ctx,
+                                StringArgumentType.getString(ctx, "dialog_id"),
+                                StringArgumentType.getString(ctx, "skin"), "", true))
+                            .then(argument("name", StringArgumentType.greedyString())
+                                .executes(ctx -> spawnNpc(ctx,
+                                    StringArgumentType.getString(ctx, "dialog_id"),
+                                    StringArgumentType.getString(ctx, "skin"),
+                                    StringArgumentType.getString(ctx, "name"), true)))
+                        )
+
                         .then(argument("name", StringArgumentType.greedyString())
                             .executes(ctx -> spawnNpc(ctx,
                                 StringArgumentType.getString(ctx, "dialog_id"),
                                 StringArgumentType.getString(ctx, "skin"),
-                                StringArgumentType.getString(ctx, "name")))
-                        )
+                                StringArgumentType.getString(ctx, "name"), false)))
                     )
                 )
             )
@@ -81,9 +103,8 @@ public final class PonyNpcCommand {
         );
     }
 
-    /** Спавнит NPC на позиции игрока. */
     private static int spawnNpc(CommandContext<ServerCommandSource> ctx,
-                                 String dialogId, String skin, String name) {
+                                 String dialogId, String skin, String name, boolean stationary) {
         try {
             ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
             var world = player.getServerWorld();
@@ -94,39 +115,28 @@ public final class PonyNpcCommand {
                 return 0;
             }
 
-            // 1 блок вперёд от игрока — не внутри игрока, но на той же высоте
             double yawRad = Math.toRadians(player.getYaw());
             double spawnX = player.getX() - Math.sin(yawRad);
             double spawnZ = player.getZ() + Math.cos(yawRad);
             npc.refreshPositionAndAngles(spawnX, player.getY(), spawnZ, player.getYaw() + 180, 0);
 
-            // Стандартная инициализация моба (как при /summon)
             npc.initialize(world, world.getLocalDifficulty(npc.getBlockPos()), SpawnReason.COMMAND, null);
-
-            // Prevent natural despawn
             npc.setPersistent();
 
-            // NPC-специфичные данные
             npc.setDialogId(dialogId);
             if (!skin.isEmpty()) npc.setSkinId(skin);
-            if (!name.isEmpty()) {
-                npc.setNpcDisplayName(name);
-            } else {
-                npc.setNpcDisplayName(dialogId);
-            }
+            npc.setNpcDisplayName(name.isEmpty() ? dialogId : name);
             npc.setCustomNameVisible(true);
+            npc.setStationary(stationary);
 
-            // Defer spawn на следующий тик — chunk sections к тому моменту будут TRACKED
-            // и entity попадёт в spatial-index корректно
             world.getServer().execute(() -> {
                 world.spawnEntityAndPassengers(npc);
-                boolean spatial = !world.getEntitiesByClass(
-                    PonyNpcEntity.class, npc.getBoundingBox().expand(1), e -> true).isEmpty();
-                LOGGER.info("[PonyNPC] Spawned id={} spatial={}", npc.getId(), spatial);
+                LOGGER.info("[PonyNPC] Spawned id={} stationary={}", npc.getId(), stationary);
             });
 
             ctx.getSource().sendFeedback(
-                () -> Text.literal("[PonyNPC] Spawned NPC with dialog: " + dialogId),
+                () -> Text.literal("[PonyNPC] Spawned NPC: dialog=" + dialogId
+                    + (stationary ? " [stationary]" : "")),
                 true
             );
             return 1;
@@ -136,7 +146,6 @@ public final class PonyNpcCommand {
         }
     }
 
-    /** Удаляет NPC, на которого смотрит игрок. */
     private static int removeNpc(CommandContext<ServerCommandSource> ctx) {
         try {
             ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
@@ -155,10 +164,7 @@ public final class PonyNpcCommand {
 
             if (hit != null && hit.getEntity() instanceof PonyNpcEntity npc) {
                 npc.discard();
-                ctx.getSource().sendFeedback(
-                    () -> Text.literal("[PonyNPC] NPC removed"),
-                    true
-                );
+                ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] NPC removed"), true);
                 return 1;
             }
 
@@ -170,7 +176,6 @@ public final class PonyNpcCommand {
         }
     }
 
-    /** Перезагружает диалоги из конфига. */
     private static int reloadDialogs(CommandContext<ServerCommandSource> ctx) {
         int count = DialogManager.getInstance().reload();
         ctx.getSource().sendFeedback(
@@ -180,7 +185,6 @@ public final class PonyNpcCommand {
         return count;
     }
 
-    /** Выводит список загруженных диалогов, группируя по режиму. */
     private static int listDialogs(CommandContext<ServerCommandSource> ctx) {
         var byMode = DialogManager.getInstance().getDialogIdsByMode();
         if (byMode.isEmpty()) {
@@ -191,17 +195,13 @@ public final class PonyNpcCommand {
             return 0;
         }
         int total = byMode.values().stream().mapToInt(java.util.List::size).sum();
-        ctx.getSource().sendFeedback(
-            () -> Text.literal("[PonyNPC] " + total + " dialog(s) loaded:"),
-            false
-        );
-        byMode.forEach((mode, ids) -> {
-            String label = "[" + mode.name().toLowerCase() + "] ";
+        ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + total + " dialog(s) loaded:"), false);
+        byMode.forEach((mode, ids) ->
             ctx.getSource().sendFeedback(
-                () -> Text.literal("  " + label + String.join(", ", ids)),
+                () -> Text.literal("  [" + mode.name().toLowerCase() + "] " + String.join(", ", ids)),
                 false
-            );
-        });
+            )
+        );
         return total;
     }
 }

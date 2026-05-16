@@ -2,9 +2,6 @@ package com.minelittlepony.ponynpc.entity;
 
 import com.minelittlepony.ponynpc.network.NetworkHandler;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ai.goal.*;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
@@ -24,16 +21,19 @@ import net.minecraft.world.World;
 
 public class PonyNpcEntity extends PathAwareEntity {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC/Entity");
+    private static final String SKINS_PREFIX = "ponynpc:textures/skins/";
+    private static final double MAX_INTERACT_DIST_SQ = 16.0; // 4 blocks max
 
-    // skinId синхронизируется через DataTracker — клиент знает какой скин рендерить
     private static final TrackedData<String> SKIN_ID =
         DataTracker.registerData(PonyNpcEntity.class, TrackedDataHandlerRegistry.STRING);
 
-    // ID диалога из config/ponynpc/dialogs/<id>.json (только сервер)
     private String dialogId = "";
-    // Кастомное имя NPC (сохраняется в NBT, также можно задать через setCustomName)
     private String npcDisplayName = "";
+
+    // Stationary — server-side only, saved to NBT
+    private boolean stationary = false;
+    private boolean hasAnchor = false;
+    private double anchorX, anchorY, anchorZ;
 
     public PonyNpcEntity(EntityType<? extends PathAwareEntity> type, World world) {
         super(type, world);
@@ -54,13 +54,59 @@ public class PonyNpcEntity extends PathAwareEntity {
 
     @Override
     protected void initGoals() {
-        // Смотрит на ближайших игроков
-        this.goalSelector.add(1, new LookAtEntityGoal(this, PlayerEntity.class, 8.0F));
-        // Изредка смотрит по сторонам
+        this.goalSelector.add(1, new LookAtEntityGoal(this, PlayerEntity.class, 4.0F));
         this.goalSelector.add(2, new LookAroundGoal(this));
     }
 
-    // ---- Инвулнерабельность ----
+    // ---- Tick — position anchor enforcement ----
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!getWorld().isClient() && stationary) {
+            if (!hasAnchor) {
+                anchorX = getX();
+                anchorY = getY();
+                anchorZ = getZ();
+                hasAnchor = true;
+            } else {
+                double dx = getX() - anchorX;
+                double dy = getY() - anchorY;
+                double dz = getZ() - anchorZ;
+                if (dx * dx + dy * dy + dz * dz > 0.01) {
+                    refreshPositionAndAngles(anchorX, anchorY, anchorZ, getYaw(), getPitch());
+                    setVelocity(0, 0, 0);
+                    velocityDirty = true;
+                }
+            }
+        }
+    }
+
+    // ---- Block velocity / knockback when stationary ----
+
+    @Override
+    public void addVelocity(double x, double y, double z) {
+        if (!stationary) super.addVelocity(x, y, z);
+    }
+
+    @Override
+    public void takeKnockback(double strength, double x, double z) {
+        if (!stationary) super.takeKnockback(strength, x, z);
+    }
+
+    // ---- No physical collision (players walk through), but click still works ----
+
+    @Override
+    public boolean isCollidable() {
+        return false;
+    }
+
+    @Override
+    public boolean isPushable() {
+        return false;
+    }
+
+    // ---- Invulnerability ----
 
     @Override
     public boolean isInvulnerableTo(DamageSource source) {
@@ -72,12 +118,14 @@ public class PonyNpcEntity extends PathAwareEntity {
         return false;
     }
 
-    // ---- Взаимодействие ----
+    // ---- Interaction (dialog) ----
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
+        // Limit dialog trigger to 4 blocks center-to-center distance
+        if (player.squaredDistanceTo(this) > MAX_INTERACT_DIST_SQ) return ActionResult.PASS;
+
         if (!this.getWorld().isClient()) {
-            LOGGER.info("[PonyNPC] interactMob server-side, player={}, dialogId={}", player.getName().getString(), dialogId);
             if (player instanceof ServerPlayerEntity serverPlayer) {
                 NetworkHandler.openDialogForPlayer(serverPlayer, this);
             }
@@ -85,13 +133,17 @@ public class PonyNpcEntity extends PathAwareEntity {
         return ActionResult.success(this.getWorld().isClient());
     }
 
-    // ---- Данные скина и диалога ----
+    // ---- Skin data ----
 
     public String getSkinId() {
         return this.dataTracker.get(SKIN_ID);
     }
 
+    /** Accepts either a short name ("applejack") or full identifier ("ponynpc:textures/skins/applejack.png"). */
     public void setSkinId(String skinId) {
+        if (skinId != null && !skinId.isEmpty() && !skinId.contains(":")) {
+            skinId = SKINS_PREFIX + skinId + ".png";
+        }
         this.dataTracker.set(SKIN_ID, skinId == null ? "" : skinId);
     }
 
@@ -103,6 +155,8 @@ public class PonyNpcEntity extends PathAwareEntity {
         }
         return null;
     }
+
+    // ---- Dialog / name ----
 
     public String getDialogId() {
         return dialogId;
@@ -127,6 +181,22 @@ public class PonyNpcEntity extends PathAwareEntity {
         }
     }
 
+    // ---- Stationary ----
+
+    public boolean isStationary() {
+        return stationary;
+    }
+
+    public void setStationary(boolean stationary) {
+        this.stationary = stationary;
+        if (stationary && !hasAnchor && isAlive()) {
+            anchorX = getX();
+            anchorY = getY();
+            anchorZ = getZ();
+            hasAnchor = true;
+        }
+    }
+
     // ---- NBT ----
 
     @Override
@@ -135,6 +205,12 @@ public class PonyNpcEntity extends PathAwareEntity {
         nbt.putString("SkinId", getSkinId());
         nbt.putString("DialogId", dialogId);
         nbt.putString("NpcDisplayName", npcDisplayName);
+        nbt.putBoolean("Stationary", stationary);
+        if (hasAnchor) {
+            nbt.putDouble("AnchorX", anchorX);
+            nbt.putDouble("AnchorY", anchorY);
+            nbt.putDouble("AnchorZ", anchorZ);
+        }
     }
 
     @Override
@@ -143,16 +219,16 @@ public class PonyNpcEntity extends PathAwareEntity {
         setSkinId(nbt.getString("SkinId"));
         dialogId = nbt.getString("DialogId");
         npcDisplayName = nbt.getString("NpcDisplayName");
-        // Восстанавливаем кастомное имя для отображения над головой
         if (!npcDisplayName.isEmpty()) {
             this.setCustomName(net.minecraft.text.Text.literal(npcDisplayName));
             this.setCustomNameVisible(true);
         }
+        stationary = nbt.getBoolean("Stationary");
+        if (stationary && nbt.contains("AnchorX")) {
+            anchorX = nbt.getDouble("AnchorX");
+            anchorY = nbt.getDouble("AnchorY");
+            anchorZ = nbt.getDouble("AnchorZ");
+            hasAnchor = true;
+        }
     }
-
-    @Override
-    public boolean isPushable() {
-        return false;
-    }
-
 }
