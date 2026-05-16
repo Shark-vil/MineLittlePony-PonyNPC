@@ -1,0 +1,59 @@
+plugins {
+    id 'fabric-loom' version '1.8-SNAPSHOT'
+}
+
+group = 'com.minelittlepony'
+version = '1.0.0'
+archivesBaseName = 'ponynpc'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+loom {
+    mixin.defaultRefmapName = 'ponynpc.mixin.refmap.json'
+}
+
+repositories {
+    maven { name 'minelp'; url 'https://repo.minelittlepony-mod.com/maven/snapshot' }
+    maven { name 'minelp-release'; url 'https://repo.minelittlepony-mod.com/maven/release' }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Full Fabric API (users have it installed anyway via MLP)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // MineLittlePony — ищем intermediary-jar, собранный шагом 1 (remapJar)
+    def mlpLibsDir = rootProject.file('build/libs')
+    def mlpJarFile = mlpLibsDir.exists() ? mlpLibsDir.listFiles()?.find { f ->
+        f.name.startsWith('minelittlepony-') && f.name.endsWith('.jar') &&
+        !f.name.contains('-dev.') && !f.name.contains('-sources.')
+    } : null
+    if (mlpJarFile != null) {
+        modCompileOnly(files(mlpJarFile))
+    } else {
+        logger.warn('[PonyNPC] MineLittlePony jar not found — run step 1 of build-ponynpc.bat first')
+    }
+    // MSON и Kirin нужны компилятору (transitively через MLP)
+    modCompileOnly "com.minelittlepony:mson:${project.mson_version}"
+    modCompileOnly "com.minelittlepony:kirin:${project.kirin_version}"
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+processResources {
+    inputs.property 'version', project.version
+
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+}

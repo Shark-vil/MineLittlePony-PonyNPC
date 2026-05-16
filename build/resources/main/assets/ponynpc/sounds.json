@@ -1,0 +1,20 @@
+{
+  "talk": {
+    "sounds": [
+      {
+        "name": "ponynpc:dialog/talk",
+        "stream": false
+      }
+    ],
+    "subtitle": "ponynpc.sound.talk"
+  },
+  "talk_magic": {
+    "sounds": [
+      {
+        "name": "ponynpc:dialog/talk_magic",
+        "stream": false
+      }
+    ],
+    "subtitle": "ponynpc.sound.talk_magic"
+  }
+}

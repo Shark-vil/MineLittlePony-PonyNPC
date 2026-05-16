@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "ponynpc",
+  "version": "${version}",
+  "name": "PonyNPC",
+  "description": "Adds a pony NPC system to Mine Little Pony with Fallout-style dialog. Create custom NPCs with dialog trees, quests, and unique skins. Dialogs are configured via simple JSON files — no coding required.",
+  "license": "MIT",
+  "icon": "assets/ponynpc/icon.png",
+  "environment": "*",
+  "authors": [
+    {
+      "name": "Pipbuck Studio"
+    }
+  ],
+  "contact": {
+    "sources": "https://github.com/MineLittlePony/MineLittlePony"
+  },
+  "entrypoints": {
+    "main": [
+      "com.minelittlepony.ponynpc.PonyNpcMod"
+    ],
+    "client": [
+      "com.minelittlepony.ponynpc.PonyNpcClient"
+    ]
+  },
+  "depends": {
+    "minecraft": ">=1.21 <1.21.3",
+    "fabricloader": ">=0.16.4",
+    "fabric-api": "*",
+    "minelp": "*"
+  }
+}

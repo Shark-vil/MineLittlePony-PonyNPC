@@ -1,0 +1,15 @@
+{
+  "id": "example_random",
+  "mode": "random",
+  "sound": "ponynpc:talk",
+  "sound_chars": 2,
+  "phrases": [
+    "Isn't Ponyville just wonderful today?",
+    "Have you visited the market? They have fresh apples!",
+    "I heard Twilight Sparkle is working on a new spell...",
+    "Did you know the weather team is planning a rainbow next week?",
+    "Rarity opened a new boutique! You should check it out.",
+    "Be careful near the Everfree Forest after dark.",
+    "Applejack's harvest this year is the best in a decade!"
+  ]
+}
