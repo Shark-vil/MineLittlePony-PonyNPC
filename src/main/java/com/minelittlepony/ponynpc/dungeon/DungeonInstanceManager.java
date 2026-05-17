@@ -7,7 +7,9 @@ import com.minelittlepony.ponynpc.party.PartyManager;
 import com.minelittlepony.ponynpc.quest.GhostNpcSpawnConfig;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
+import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
+import net.minecraft.block.BlockState;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.s2c.play.PositionFlag;
@@ -135,6 +137,7 @@ public final class DungeonInstanceManager {
             inst.addPlayer(player.getUuid(), ret);
             playerInstance.put(player.getUuid(), inst);
             teleportPlayer(player, dungeonWorld, spawnX, spawnY, spawnZ, 0f, 0f);
+            player.playSound(PonyNpcSounds.DUNGEON_ENTER, 0.5f, 1.0f);
             player.sendMessage(Text.literal("[Dungeon] You entered: " + def.name), false);
         }
 
@@ -185,6 +188,7 @@ public final class DungeonInstanceManager {
         GhostNpcManager.getInstance().despawnAll(player.getUuid());
         teleportBack(player, inst, server);
         removeFromInstance(player.getUuid(), inst, server);
+        player.playSound(PonyNpcSounds.DUNGEON_EXIT, 0.6f, 1.0f);
         player.sendMessage(Text.literal("[Dungeon] You left the dungeon."), false);
         return true;
     }
@@ -213,6 +217,7 @@ public final class DungeonInstanceManager {
                 QuestManager.getInstance().completeDungeonStages(member, inst.dungeonId);
                 GhostNpcManager.getInstance().despawnAll(memberId);
                 teleportBack(member, inst, server);
+                member.playSound(PonyNpcSounds.DUNGEON_COMPLETE, 0.8f, 1.0f);
                 member.sendMessage(Text.literal("[Dungeon] Dungeon completed! Rewards given."), false);
             }
             playerInstance.remove(memberId);
@@ -224,13 +229,58 @@ public final class DungeonInstanceManager {
         return true;
     }
 
-    // ── Дисконнект ────────────────────────────────────────────────
+    // ── Дисконнект / возрождение ──────────────────────────────────
 
     public void onPlayerDisconnect(UUID uuid) {
         DungeonInstance inst = playerInstance.remove(uuid);
         if (inst == null) return;
         inst.removePlayer(uuid);
         if (inst.isEmpty()) freeSlots.add(inst.slotId);
+    }
+
+    /** Вызывается когда игрок возродился вне dungeon-измерения (например, после смерти). */
+    public void onPlayerRespawnedOutside(UUID uuid) {
+        DungeonInstance inst = playerInstance.remove(uuid);
+        if (inst == null) return;
+        inst.removePlayer(uuid);
+        if (inst.isEmpty()) freeSlots.add(inst.slotId);
+        LOGGER.info("Cleared dungeon instance for respawned player {}", uuid);
+    }
+
+    /** Принудительно удалить игрока из инстанса без наград и телепортации (для /dungeon exit). */
+    public void forceRemoveFromInstance(UUID uuid) {
+        DungeonInstance inst = playerInstance.remove(uuid);
+        if (inst == null) return;
+        inst.removePlayer(uuid);
+        if (inst.isEmpty()) freeSlots.add(inst.slotId);
+    }
+
+    /**
+     * Проверяет, может ли игрок сломать блок в данже.
+     * Сравнивает текущий блок слота с блоком в build-зоне:
+     * если они отличаются — игрок сам поставил этот блок → разрешаем сломать.
+     */
+    public boolean canBreakBlock(UUID playerUuid, ServerWorld dungeonWorld, BlockPos pos, BlockState currentState) {
+        DungeonInstance inst = playerInstance.get(playerUuid);
+        if (inst == null) return true; // не в инстансе — это админ в build-режиме
+        DungeonDefinition def = DungeonRegistry.getInstance().getDungeon(inst.dungeonId).orElse(null);
+        if (def == null || def.destructible) return true;
+        if (!def.hasBuildOrigin()) return true;
+
+        BlockPos slotOrigin = inst.getSlotOrigin(def);
+        int rx = pos.getX() - slotOrigin.getX();
+        int ry = pos.getY() - slotOrigin.getY();
+        int rz = pos.getZ() - slotOrigin.getZ();
+
+        // Вне границ данжа → разрешаем (игрок построил за пределами)
+        if (rx < 0 || rx >= def.getWidth() || ry < 0 || ry >= def.getHeight() || rz < 0 || rz >= def.getLength()) {
+            return true;
+        }
+
+        // Сравниваем с блоком в build-зоне
+        BlockPos buildPos = new BlockPos(def.buildOrigin.x + rx, def.buildOrigin.y + ry, def.buildOrigin.z + rz);
+        BlockState buildState = dungeonWorld.getBlockState(buildPos);
+        return !buildState.equals(currentState);
     }
 
     // ── Внутренние методы ─────────────────────────────────────────
@@ -291,9 +341,11 @@ public final class DungeonInstanceManager {
                         player.giveItemStack(new ItemStack(item, Math.max(1, reward.count)));
                 }
                 case "quest_item" -> {
-                    if (reward.id != null)
+                    if (reward.id != null) {
                         QuestPocketState.getOrCreate(player.getServer())
                             .giveItem(player.getUuid(), reward.id, Math.max(1, reward.count));
+                        player.playSound(PonyNpcSounds.ITEM_RECEIVE, 0.8f, 1.2f);
+                    }
                 }
             }
         }

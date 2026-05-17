@@ -2,6 +2,7 @@ package com.minelittlepony.ponynpc.quest;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
 import net.fabricmc.loader.api.FabricLoader;
@@ -116,6 +117,7 @@ public final class QuestManager {
         if (def == null) { LOGGER.warn("startQuest: unknown quest '{}'", questId); return; }
         QuestStateStore store = QuestStateStore.getOrCreate(player.getServer());
         store.startQuest(player.getUuid(), questId, def.startStage, player.getServerWorld().getTime());
+        player.playSound(PonyNpcSounds.QUEST_ACCEPT, 0.6f, 1.0f);
         LOGGER.info("Quest '{}' started for player '{}'", questId, player.getName().getString());
     }
 
@@ -140,8 +142,10 @@ public final class QuestManager {
             player.getServerWorld().getTime());
 
         if (nextStage == null) {
+            player.playSound(PonyNpcSounds.QUEST_COMPLETE, 0.8f, 1.0f);
             LOGGER.info("Quest '{}' COMPLETED by player '{}'", questId, player.getName().getString());
         } else {
+            player.playSound(PonyNpcSounds.QUEST_STAGE, 0.6f, 1.1f);
             LOGGER.info("Quest '{}' advanced: '{}' → '{}' for player '{}'",
                 questId, currentStage, nextStage, player.getName().getString());
         }

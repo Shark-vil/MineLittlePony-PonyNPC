@@ -15,12 +15,14 @@ import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
 import com.minelittlepony.ponynpc.trigger.ProximityTriggerManager;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,16 +50,12 @@ public class PonyNpcMod implements ModInitializer {
         PartyCommand.register();
         DungeonBuilderCommand.register();
 
-        // Block break protection: deny breaking in dungeon instances unless destructible = true
+        // Block break protection: deny breaking original dungeon blocks; allow breaking own placed blocks
         PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
             if (!(player instanceof ServerPlayerEntity sp)) return true;
             if (!world.getRegistryKey().equals(DungeonInstanceManager.DUNGEON_WORLD_KEY)) return true;
-            // Admins not inside an active instance can always break (for building)
-            return DungeonInstanceManager.getInstance().getInstance(sp.getUuid())
-                .map(inst -> DungeonRegistry.getInstance().getDungeon(inst.dungeonId)
-                    .map(def -> def.destructible)
-                    .orElse(false))
-                .orElse(true); // not in instance → allow (admin building)
+            if (!(world instanceof ServerWorld sw)) return true;
+            return DungeonInstanceManager.getInstance().canBreakBlock(sp.getUuid(), sw, pos, state);
         });
 
         discoverBuiltinSkins();
@@ -87,6 +85,13 @@ public class PonyNpcMod implements ModInitializer {
             ProximityTriggerManager.getInstance().clearForPlayer(uuid);
             PartyManager.getInstance().onPlayerDisconnect(uuid, server);
             DungeonInstanceManager.getInstance().onPlayerDisconnect(uuid);
+        });
+
+        // При смерти/возрождении вне dungeon-измерения — убираем из инстанса
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+            if (!newPlayer.getServerWorld().getRegistryKey().equals(DungeonInstanceManager.DUNGEON_WORLD_KEY)) {
+                DungeonInstanceManager.getInstance().onPlayerRespawnedOutside(newPlayer.getUuid());
+            }
         });
     }
 

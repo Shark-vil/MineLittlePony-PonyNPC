@@ -1,20 +1,42 @@
 {
   "talk": {
-    "sounds": [
-      {
-        "name": "ponynpc:dialog/talk",
-        "stream": false
-      }
-    ],
+    "sounds": [{"name": "ponynpc:dialog/talk"}],
     "subtitle": "ponynpc.sound.talk"
   },
   "talk_magic": {
-    "sounds": [
-      {
-        "name": "ponynpc:dialog/talk_magic",
-        "stream": false
-      }
-    ],
+    "sounds": [{"name": "ponynpc:dialog/talk_magic"}],
     "subtitle": "ponynpc.sound.talk_magic"
+  },
+  "quest_accept": {
+    "sounds": [{"name": "minecraft:entity/player/levelup"}],
+    "subtitle": "ponynpc.sound.quest_accept"
+  },
+  "quest_stage": {
+    "sounds": [{"name": "minecraft:entity/experience_orb/pickup"}],
+    "subtitle": "ponynpc.sound.quest_stage"
+  },
+  "quest_complete": {
+    "sounds": [{"name": "minecraft:entity/player/levelup"}],
+    "subtitle": "ponynpc.sound.quest_complete"
+  },
+  "dungeon_enter": {
+    "sounds": [{"name": "minecraft:block/portal/travel"}],
+    "subtitle": "ponynpc.sound.dungeon_enter"
+  },
+  "dungeon_exit": {
+    "sounds": [{"name": "minecraft:entity/enderman/teleport"}],
+    "subtitle": "ponynpc.sound.dungeon_exit"
+  },
+  "dungeon_complete": {
+    "sounds": [{"name": "minecraft:entity/player/levelup"}],
+    "subtitle": "ponynpc.sound.dungeon_complete"
+  },
+  "item_receive": {
+    "sounds": [{"name": "minecraft:entity/item/pickup"}],
+    "subtitle": "ponynpc.sound.item_receive"
+  },
+  "dialog_click": {
+    "sounds": [{"name": "minecraft:ui/button/click"}],
+    "subtitle": "ponynpc.sound.dialog_click"
   }
 }

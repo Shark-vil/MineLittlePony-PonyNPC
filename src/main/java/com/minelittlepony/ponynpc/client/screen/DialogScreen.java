@@ -3,6 +3,7 @@ package com.minelittlepony.ponynpc.client.screen;
 import com.minelittlepony.ponynpc.network.CloseDialogPayload;
 import com.minelittlepony.ponynpc.network.DialogChoicePayload;
 import com.minelittlepony.ponynpc.network.OpenDialogPayload;
+import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
@@ -258,7 +259,8 @@ public class DialogScreen extends Screen {
     }
 
     private void selectChoice(OpenDialogPayload.ChoiceData choice) {
-        if (!choice.available()) return; // заблокировано условием
+        if (!choice.available()) return;
+        client.getSoundManager().play(PositionedSoundInstance.master(PonyNpcSounds.DIALOG_CLICK, 1.0f, 0.8f));
         ClientPlayNetworking.send(new DialogChoicePayload(npcUuid, nodeId, choice.id()));
     }
 

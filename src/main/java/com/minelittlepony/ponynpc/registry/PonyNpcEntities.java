@@ -26,7 +26,7 @@ public final class PonyNpcEntities {
         Registries.ENTITY_TYPE,
         Identifier.of("ponynpc", "quest_marker"),
         EntityType.Builder.<QuestMarkerEntity>create(QuestMarkerEntity::new, SpawnGroup.MISC)
-            .dimensions(0.5F, 0.5F)
+            .dimensions(0.6F, 1.1F)
             .maxTrackingRange(10)
             .trackingTickInterval(4)
             .disableSummon()

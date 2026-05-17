@@ -1,6 +1,8 @@
 package com.minelittlepony.ponynpc.dungeon;
 
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +17,11 @@ public final class DungeonBuilderSession {
     public BlockPos pos2;
     public BlockPos spawn;
     public BlockPos finish;
+
+    // Позиция возврата при /dungeon exit
+    public RegistryKey<World> returnWorldKey;
+    public double returnX, returnY, returnZ;
+    public float returnYaw, returnPitch;
 
     private DungeonBuilderSession() {}
 

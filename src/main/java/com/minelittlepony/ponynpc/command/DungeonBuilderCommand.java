@@ -8,6 +8,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.block.Blocks;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -76,6 +77,9 @@ public final class DungeonBuilderCommand {
                 .then(CommandManager.literal("test")
                     .then(CommandManager.argument("id", StringArgumentType.word())
                         .executes(ctx -> test(ctx, StringArgumentType.getString(ctx, "id")))))
+
+                .then(CommandManager.literal("exit")
+                    .executes(DungeonBuilderCommand::exitBuild))
         );
     }
 
@@ -234,18 +238,26 @@ public final class DungeonBuilderCommand {
             return 0;
         }
 
+        // Save return position before entering build mode
+        DungeonBuilderSession session = DungeonBuilderSession.get(player.getUuid());
+        if (!player.getServerWorld().getRegistryKey().equals(DungeonInstanceManager.DUNGEON_WORLD_KEY)) {
+            session.returnWorldKey = player.getServerWorld().getRegistryKey();
+            session.returnX = player.getX();
+            session.returnY = player.getY();
+            session.returnZ = player.getZ();
+            session.returnYaw = player.getYaw();
+            session.returnPitch = player.getPitch();
+        }
+
         DungeonDefinition def = DungeonRegistry.getInstance().getDungeon(id).orElse(null);
 
         double tx, ty, tz;
         if (def != null && def.hasBuildOrigin()) {
-            // Teleport to existing build zone
             tx = def.buildOrigin.x + 0.5;
             ty = def.buildOrigin.y;
             tz = def.buildOrigin.z + 0.5;
             player.sendMessage(Text.literal("[Dungeon] Teleporting to build zone of '" + id + "'."), false);
         } else {
-            // Assign a new build zone at negative X (far from player slots which are at positive X)
-            // Use slot -1 style: X = -(slot * 10000 + 5000). Start at -5000, -15000, etc.
             int buildSlot = DungeonRegistry.getInstance().getNextBuildSlot();
             tx = -(buildSlot * 10000 + 5000) + 0.5;
             ty = 64;
@@ -254,8 +266,54 @@ public final class DungeonBuilderCommand {
                 + "'. Build your dungeon here, then use /dungeon pos1/pos2/spawn/save " + id + "."), false);
         }
 
+        // Place 5×5 stone platform one block below spawn so the admin doesn't fall into the void
+        int px = (int) Math.floor(tx);
+        int py = (int) Math.floor(ty) - 1;
+        int pz = (int) Math.floor(tz);
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                BlockPos platform = new BlockPos(px + dx, py, pz + dz);
+                if (dungeonWorld.getBlockState(platform).isAir()) {
+                    dungeonWorld.setBlockState(platform, Blocks.STONE.getDefaultState());
+                }
+            }
+        }
+
         player.teleport(dungeonWorld, tx, ty, tz,
             java.util.Set.of(), player.getYaw(), player.getPitch());
+        return 1;
+    }
+
+    // ── /dungeon exit ─────────────────────────────────────────────
+
+    private static int exitBuild(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = getPlayer(ctx);
+        if (player == null) return 0;
+        if (!player.getServerWorld().getRegistryKey().equals(DungeonInstanceManager.DUNGEON_WORLD_KEY)) {
+            player.sendMessage(Text.literal("[Dungeon] You are not in the dungeon dimension."), false);
+            return 0;
+        }
+
+        // Remove from active dungeon instance if in one (admin escape)
+        DungeonInstanceManager.getInstance().forceRemoveFromInstance(player.getUuid());
+
+        DungeonBuilderSession session = DungeonBuilderSession.get(player.getUuid());
+        if (session.returnWorldKey != null) {
+            ServerWorld returnWorld = ctx.getSource().getServer().getWorld(session.returnWorldKey);
+            if (returnWorld != null) {
+                player.teleport(returnWorld, session.returnX, session.returnY, session.returnZ,
+                    java.util.Set.of(), session.returnYaw, session.returnPitch);
+                player.sendMessage(Text.literal("[Dungeon] Returned to previous location."), false);
+                return 1;
+            }
+        }
+
+        // Fallback: overworld spawn
+        ServerWorld overworld = ctx.getSource().getServer().getOverworld();
+        BlockPos spawn = overworld.getSpawnPos();
+        player.teleport(overworld, spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5,
+            java.util.Set.of(), 0f, 0f);
+        player.sendMessage(Text.literal("[Dungeon] Returned to overworld spawn."), false);
         return 1;
     }
 
