@@ -12,6 +12,7 @@ import com.minelittlepony.ponynpc.state.PlayerQuestState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
 
 import net.fabricmc.fabric.api.networking.v1.*;
+import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -139,7 +140,7 @@ public final class NetworkHandler {
         int soundChars = Math.max(1, dialog.soundChars);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            entity.getUuid(), entity.getNpcDisplayName(), dialog.id,
+            ((Entity) entity).getUuid(), entity.getNpcDisplayName(), dialog.id,
             RANDOM_NODE_ID, phrase, sound, soundChars, List.of()
         ));
     }
@@ -159,12 +160,12 @@ public final class NetworkHandler {
     private static void sendQuestNode(ServerPlayerEntity player, IDialogEntity entity,
                                       DialogData dialog, String nodeId, DialogNode node,
                                       PlayerDialogState state) {
-        String progressKey = dialog.id + ":" + entity.getUuidAsString();
+        String progressKey = dialog.id + ":" + ((Entity) entity).getUuidAsString();
 
         List<OpenDialogPayload.ChoiceData> choiceDataList = buildChoiceList(player, entity, node, progressKey, state);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            entity.getUuid(), entity.getNpcDisplayName(), dialog.id, nodeId,
+            ((Entity) entity).getUuid(), entity.getNpcDisplayName(), dialog.id, nodeId,
             node.text,
             node.sound != null ? node.sound : "",
             Math.max(1, node.soundChars),
@@ -246,7 +247,7 @@ public final class NetworkHandler {
 
         // Пометить once-выбор
         if (selected.once && player.getWorld() instanceof ServerWorld sw) {
-            String progressKey = dialog.id + ":" + entity.getUuidAsString();
+            String progressKey = dialog.id + ":" + ((Entity) entity).getUuidAsString();
             PlayerDialogState.getOrCreate(sw).markChoiceDone(player.getUuid(), progressKey, selected.id);
         }
 
@@ -256,13 +257,13 @@ public final class NetworkHandler {
 
         // Навигация
         if (selected.next == null) {
-            ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getUuid()));
+            ServerPlayNetworking.send(player, new CloseDialogPayload(((Entity) entity).getUuid()));
             closeDialogEntity(player, entity);
         } else {
             Optional<DialogNode> nextNodeOpt = dialog.getNode(selected.next);
             if (nextNodeOpt.isEmpty()) {
                 LOGGER.warn("Choice '{}' references unknown node '{}'", selected.id, selected.next);
-                ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getUuid()));
+                ServerPlayNetworking.send(player, new CloseDialogPayload(((Entity) entity).getUuid()));
                 closeDialogEntity(player, entity);
                 return;
             }

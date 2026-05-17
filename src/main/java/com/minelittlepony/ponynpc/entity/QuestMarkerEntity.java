@@ -55,11 +55,6 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity, ID
         return getCustomName() != null ? getCustomName().getString() : "";
     }
 
-    @Override
-    public String getUuidAsString() {
-        return getUuid().toString();
-    }
-
     public void addVisibleTo(UUID uuid) {
         visibleToPlayers.add(uuid);
     }
