@@ -1,10 +1,12 @@
 package com.minelittlepony.ponynpc.quest;
 
+import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -42,6 +44,8 @@ public final class QuestActionExecutor {
             executeQuestAction(player, npc, parts);
         } else if ("ghost_npc".equals(parts[0])) {
             executeGhostNpcAction(player, npc, parts);
+        } else if ("dungeon".equals(parts[0])) {
+            executeDungeonAction(player, parts);
         } else {
             LOGGER.warn("Unknown action namespace: '{}'", parts[0]);
         }
@@ -113,6 +117,28 @@ public final class QuestActionExecutor {
                 }
             }
             default -> LOGGER.warn("Unknown quest action type: '{}'", type);
+        }
+    }
+
+    // ── Dungeon actions ───────────────────────────────────────────
+
+    private static void executeDungeonAction(ServerPlayerEntity player, String[] parts) {
+        if (parts.length < 2) return;
+        MinecraftServer server = player.getServer();
+        DungeonInstanceManager dim = DungeonInstanceManager.getInstance();
+        switch (parts[1]) {
+            case "enter" -> {
+                // dungeon:enter:<dungeonId>
+                if (parts.length < 3) { LOGGER.warn("dungeon:enter missing dungeonId"); return; }
+                dim.enterDungeon(player, parts[2], server);
+            }
+            case "exit" ->
+                // dungeon:exit
+                dim.exitDungeon(player, server);
+            case "complete" ->
+                // dungeon:complete (rewards all players in the instance, teleports back)
+                dim.completeDungeon(player, server);
+            default -> LOGGER.warn("Unknown dungeon action: '{}'", parts[1]);
         }
     }
 

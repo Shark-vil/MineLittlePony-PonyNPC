@@ -1,5 +1,6 @@
 package com.minelittlepony.ponynpc.quest;
 
+import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -42,13 +43,32 @@ public final class QuestConditionChecker {
             return true;
         }
 
-        // quest:<questId>:...
         if ("quest".equals(parts[0])) {
             return checkQuestCondition(player, parts);
+        }
+        if ("dungeon".equals(parts[0])) {
+            return checkDungeonCondition(player, parts);
         }
 
         LOGGER.warn("Unknown condition namespace: '{}'", parts[0]);
         return true;
+    }
+
+    private static boolean checkDungeonCondition(ServerPlayerEntity player, String[] parts) {
+        if (parts.length < 2) return true;
+        DungeonInstanceManager dim = DungeonInstanceManager.getInstance();
+        return switch (parts[1]) {
+            case "in_instance" -> {
+                // dungeon:in_instance:<dungeonId>
+                if (parts.length < 3) yield false;
+                yield dim.isInDungeon(player.getUuid(), parts[2]);
+            }
+            case "not_in_instance" -> !dim.isInDungeon(player.getUuid());
+            default -> {
+                LOGGER.warn("Unknown dungeon condition: '{}'", parts[1]);
+                yield true;
+            }
+        };
     }
 
     private static boolean checkQuestCondition(ServerPlayerEntity player, String[] parts) {

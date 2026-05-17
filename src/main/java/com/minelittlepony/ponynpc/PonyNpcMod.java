@@ -1,9 +1,13 @@
 package com.minelittlepony.ponynpc;
 
+import com.minelittlepony.ponynpc.command.PartyCommand;
 import com.minelittlepony.ponynpc.command.PonyNpcCommand;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
+import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
+import com.minelittlepony.ponynpc.dungeon.DungeonRegistry;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.network.NetworkHandler;
+import com.minelittlepony.ponynpc.party.PartyManager;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
@@ -38,14 +42,17 @@ public class PonyNpcMod implements ModInitializer {
         PonyNpcEntities.bootstrap();
         NetworkHandler.registerServer();
         PonyNpcCommand.register();
+        PartyCommand.register();
 
         discoverBuiltinSkins();
 
-        // Загружаем диалоги и квесты при старте сервера
+        // Загружаем диалоги, квесты и данжи при старте сервера
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            int dialogs = DialogManager.getInstance().reload();
-            int quests  = QuestManager.getInstance().reload();
-            LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s)", dialogs, quests);
+            int dialogs  = DialogManager.getInstance().reload();
+            int quests   = QuestManager.getInstance().reload();
+            int dungeons = DungeonRegistry.getInstance().reload();
+            LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s), {} dungeon(s)",
+                dialogs, quests, dungeons);
         });
 
         // Тик: proximity-триггеры + WAIT_DAYS завершение
@@ -57,11 +64,13 @@ public class PonyNpcMod implements ModInitializer {
             }
         });
 
-        // При отключении игрока — чистим ghost NPC и proximity-триггеры
+        // При отключении игрока — чистим ghost NPC, proximity-триггеры, пати, данж
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var uuid = handler.player.getUuid();
             GhostNpcManager.getInstance().despawnAll(uuid);
             ProximityTriggerManager.getInstance().clearForPlayer(uuid);
+            PartyManager.getInstance().onPlayerDisconnect(uuid, server);
+            DungeonInstanceManager.getInstance().onPlayerDisconnect(uuid);
         });
     }
 

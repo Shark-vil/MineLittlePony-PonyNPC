@@ -1,0 +1,11 @@
+{
+  "id": "shadow_ruins",
+  "name": "Shadow Ruins",
+  "generate_platform": true,
+  "platform_width": 40,
+  "platform_length": 60,
+  "rewards": [
+    {"type": "currency", "count": 50},
+    {"type": "quest_item", "id": "shadow_crystal", "count": 1}
+  ]
+}

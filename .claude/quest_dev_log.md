@@ -39,9 +39,64 @@
 - [x] Mixin config + fabric.mod.json update
 - [ ] Example quest JSON (shadow_book_ch1)
 
-### Phase 2
-- [ ] Dungeon Instance System (custom dimension, instance slots)
-- [ ] Party System
+### Phase 2 (ЗАВЕРШЕНА)
+- [x] Party System (Party, PartyManager, /party command)
+  - Bug fix: pendingInvites теперь хранится в отдельном Map<UUID, Party> (не в playerParty)
+- [x] Dungeon Dimension (ponynpc:dungeon, flat void world)
+  - dimension_type/dungeon.json — effects=the_end, no skylight, ambient_light=0.15
+  - dimension/dungeon.json — minecraft:flat generator, empty layers, the_void biome
+- [x] DungeonDefinition (JSON), DungeonRegistry
+  - Загружает из config/ponynpc/dungeons/*.json
+  - Копирует shadow_ruins.json из /data/ponynpc/dungeons/ при первом запуске
+- [x] DungeonInstance (slot, players, return positions)
+  - Slot N: centerX = N*10000+5000, centerZ = 5000
+  - ReturnData record: worldKey + xyz + yaw/pitch
+- [x] DungeonInstanceManager (solo+party entry, exit, completion)
+  - enterDungeon: если игрок — лидер пати, вся пати входит вместе
+  - exitDungeon: без наград, только телепорт
+  - completeDungeon: награды из DungeonDefinition + телепорт всех участников
+  - Телепорт: player.teleport(ServerWorld, x,y,z, Set.<PositionFlag>of(), yaw, pitch)
+  - PositionFlag: net.minecraft.network.packet.s2c.play.PositionFlag
+- [x] DungeonGenerator (basic platform procedural generation)
+  - 40×60 stone_brick floor + 4-high walls + glowstone at wall tops
+  - 3-wide entrance gap in south wall
+  - 3×3 gold block finish zone near north wall
+- [x] Actions: dungeon:enter:<id>, dungeon:exit, dungeon:complete
+- [x] Conditions: dungeon:in_instance:<dungeonId>, dungeon:not_in_instance
+- [x] PonyNpcMod/Commands update
+  - /party — новая команда для всех игроков
+  - /ponynpc dungeon list|enter|exit — admin
+  - /ponynpc reload — теперь перезагружает и данжи
+
+## Архитектура Phase 2
+
+### Pati system
+- Party: leaderUUID + Set<UUID> members, in-memory only
+- PartyManager singleton (Map<UUID, Party> playerToParty)
+- /party create/invite/join/leave/list/kick
+
+### Dungeon slots
+- Slot N центр: X = N*10000+5000, Y=64, Z=5000
+- Поиск свободного слота: просто nextSlot++, слоты не переиспользуются пока
+  (при exitDungeon слот освобождается и добавляется в freeSlots queue)
+
+### DungeonInstance fields
+- slotId: int
+- dungeonId: String
+- players: Set<UUID> (solo или pati)
+- returnData: Map<UUID, ReturnData(world, x,y,z,yaw,pitch)>
+
+### Generation
+- Если generate_platform=true: размещаем 40×60 платформу из stone_bricks
+- Торчи на стенах каждые 5 блоков
+- Открытый вход (начало) + финишная зона (конец)
+
+### Completion flow
+1. Dialog action "dungeon:complete:shadow_ruins"
+2. QuestActionExecutor → DungeonInstanceManager.completeDungeon(player)
+3. Give rewards (items + quest items + currency)
+4. Advance quest stage DUNGEON → nextStage
+5. Teleport player back to return position
 
 ---
 

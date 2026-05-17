@@ -2,6 +2,8 @@ package com.minelittlepony.ponynpc.command;
 
 import com.minelittlepony.ponynpc.PonyNpcMod;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
+import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
+import com.minelittlepony.ponynpc.dungeon.DungeonRegistry;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
@@ -55,6 +57,13 @@ public final class PonyNpcCommand {
         return builder.buildFuture();
     };
 
+    private static final SuggestionProvider<ServerCommandSource> DUNGEON_SUGGESTIONS = (ctx, builder) -> {
+        DungeonRegistry.getInstance().getDungeonIds().stream()
+            .filter(id -> id.startsWith(builder.getRemaining()))
+            .forEach(builder::suggest);
+        return builder.buildFuture();
+    };
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             register(dispatcher, registryAccess)
@@ -94,15 +103,16 @@ public final class PonyNpcCommand {
 
             .then(literal("remove").executes(PonyNpcCommand::removeNpc))
 
-            // ── Reload (dialogs + quests) ────────────────────────
+            // ── Reload (dialogs + quests + dungeons) ─────────────
             .then(literal("reload").executes(ctx -> {
                 int d = DialogManager.getInstance().reload();
                 int q = QuestManager.getInstance().reload();
+                int u = DungeonRegistry.getInstance().reload();
                 ctx.getSource().sendFeedback(
-                    () -> Text.literal("[PonyNPC] Reloaded " + d + " dialog(s) and " + q + " quest(s)"),
+                    () -> Text.literal("[PonyNPC] Reloaded " + d + " dialog(s), " + q + " quest(s), " + u + " dungeon(s)"),
                     true
                 );
-                return d + q;
+                return d + q + u;
             }))
 
             .then(literal("list").executes(PonyNpcCommand::listDialogs))
@@ -167,6 +177,48 @@ public final class PonyNpcCommand {
                             .executes(ctx -> pocketTake(ctx,
                                 EntityArgumentType.getPlayer(ctx, "target"),
                                 StringArgumentType.getString(ctx, "item_id")))))))
+
+            // ── Dungeon management (admin) ────────────────────────
+            .then(literal("dungeon")
+                .then(literal("list").executes(ctx -> {
+                    var ids = DungeonRegistry.getInstance().getDungeonIds();
+                    if (ids.isEmpty()) {
+                        ctx.getSource().sendFeedback(
+                            () -> Text.literal("[PonyNPC] No dungeons loaded."), false);
+                        return 0;
+                    }
+                    ctx.getSource().sendFeedback(
+                        () -> Text.literal("[PonyNPC] " + ids.size() + " dungeon(s): " + String.join(", ", ids)), false);
+                    return ids.size();
+                }))
+                .then(literal("enter")
+                    .then(argument("dungeon_id", StringArgumentType.word())
+                        .suggests(DUNGEON_SUGGESTIONS)
+                        .executes(ctx -> {
+                            ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                            String id = StringArgumentType.getString(ctx, "dungeon_id");
+                            DungeonInstanceManager.getInstance().enterDungeon(player, id, ctx.getSource().getServer());
+                            return 1;
+                        })
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                String id = StringArgumentType.getString(ctx, "dungeon_id");
+                                DungeonInstanceManager.getInstance().enterDungeon(target, id, ctx.getSource().getServer());
+                                return 1;
+                            }))))
+                .then(literal("exit")
+                    .executes(ctx -> {
+                        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                        DungeonInstanceManager.getInstance().exitDungeon(player, ctx.getSource().getServer());
+                        return 1;
+                    })
+                    .then(argument("target", EntityArgumentType.player())
+                        .executes(ctx -> {
+                            ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                            DungeonInstanceManager.getInstance().exitDungeon(target, ctx.getSource().getServer());
+                            return 1;
+                        }))))
         );
     }
 
