@@ -8,9 +8,13 @@ import com.minelittlepony.ponynpc.dialog.DialogManager;
 import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
 import com.minelittlepony.ponynpc.dungeon.DungeonRegistry;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
+import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
+import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
+import com.minelittlepony.ponynpc.state.QuestStateStore;
+import com.minelittlepony.ponynpc.trigger.ProximityTriggerManager;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -21,11 +25,15 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.projectile.ProjectileUtil;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -120,6 +128,21 @@ public final class PonyNpcCommand {
                                 StringArgumentType.getString(ctx, "skin"),
                                 StringArgumentType.getString(ctx, "name"), false))))))
 
+            // ── Marker spawn (item-rendered, persistent) ────────────
+            .then(literal("spawn_marker")
+                .then(argument("dialog_id", StringArgumentType.string())
+                    .suggests(DIALOG_SUGGESTIONS)
+                    .then(argument("item_id", StringArgumentType.word())
+                        .executes(ctx -> spawnMarker(ctx,
+                            StringArgumentType.getString(ctx, "dialog_id"),
+                            StringArgumentType.getString(ctx, "item_id"),
+                            ""))
+                        .then(argument("name", StringArgumentType.greedyString())
+                            .executes(ctx -> spawnMarker(ctx,
+                                StringArgumentType.getString(ctx, "dialog_id"),
+                                StringArgumentType.getString(ctx, "item_id"),
+                                StringArgumentType.getString(ctx, "name")))))))
+
             .then(literal("remove").executes(PonyNpcCommand::removeNpc))
 
             // ── Reload (dialogs + quests + dungeons) ─────────────
@@ -170,6 +193,17 @@ public final class PonyNpcCommand {
                             StringArgumentType.getString(ctx, "quest_id")))
                         .then(argument("target", EntityArgumentType.player())
                             .executes(ctx -> questAdvance(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "quest_id"))))))
+
+                .then(literal("reset")
+                    .then(argument("quest_id", StringArgumentType.string())
+                        .suggests(QUEST_SUGGESTIONS)
+                        .executes(ctx -> questReset(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "quest_id")))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> questReset(ctx,
                                 EntityArgumentType.getPlayer(ctx, "target"),
                                 StringArgumentType.getString(ctx, "quest_id")))))))
 
@@ -298,6 +332,40 @@ public final class PonyNpcCommand {
         }
     }
 
+    private static int spawnMarker(CommandContext<ServerCommandSource> ctx,
+                                    String dialogId, String itemId, String name) {
+        try {
+            ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+            var world = player.getServerWorld();
+
+            QuestMarkerEntity marker = PonyNpcEntities.QUEST_MARKER.create(world);
+            if (marker == null) { ctx.getSource().sendError(Text.literal("[PonyNPC] Failed to create marker")); return 0; }
+
+            ItemStack displayItem = ItemStack.EMPTY;
+            Identifier id = Identifier.tryParse(itemId);
+            if (id != null) {
+                var item = Registries.ITEM.get(id);
+                displayItem = new ItemStack(item);
+            }
+
+            String displayName = name.isEmpty() ? dialogId : name;
+            marker.setupPermanent(displayName, dialogId, displayItem);
+            marker.setCustomNameVisible(true);
+            marker.refreshPositionAndAngles(player.getX(), player.getY(), player.getZ(), 0, 0);
+
+            world.getServer().execute(() -> world.spawnEntityAndPassengers(marker));
+
+            ctx.getSource().sendFeedback(
+                () -> Text.literal("[PonyNPC] Spawned marker: dialog=" + dialogId + " item=" + itemId),
+                true
+            );
+            return 1;
+        } catch (Exception e) {
+            ctx.getSource().sendError(Text.literal("[PonyNPC] " + e.getMessage()));
+            return 0;
+        }
+    }
+
     private static int removeNpc(CommandContext<ServerCommandSource> ctx) {
         try {
             ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
@@ -398,6 +466,18 @@ public final class PonyNpcCommand {
         String stage = qm.getCurrentStage(target, questId).orElse("COMPLETE");
         ctx.getSource().sendFeedback(
             () -> Text.literal("[PonyNPC] Advanced quest '" + questId + "' — now on: " + stage), true);
+        return 1;
+    }
+
+    private static int questReset(CommandContext<ServerCommandSource> ctx,
+                                   ServerPlayerEntity target, String questId) {
+        QuestStateStore.getOrCreate(target.getServer()).resetQuest(target.getUuid(), questId);
+        ProximityTriggerManager.getInstance().clearForQuest(target.getUuid(), questId);
+        GhostNpcManager.getInstance().despawnAll(target.getUuid());
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] Quest '" + questId + "' reset for " + target.getName().getString()),
+            true
+        );
         return 1;
     }
 

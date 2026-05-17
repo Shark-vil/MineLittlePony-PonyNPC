@@ -116,7 +116,7 @@ public final class QuestManager {
         QuestDefinition def = quests.get(questId);
         if (def == null) { LOGGER.warn("startQuest: unknown quest '{}'", questId); return; }
         QuestStateStore store = QuestStateStore.getOrCreate(player.getServer());
-        store.startQuest(player.getUuid(), questId, def.startStage, player.getServerWorld().getTime());
+        store.startQuest(player.getUuid(), questId, def.startStage, player.getServerWorld().getTimeOfDay());
         player.playSound(PonyNpcSounds.QUEST_ACCEPT, 0.6f, 1.0f);
         LOGGER.info("Quest '{}' started for player '{}'", questId, player.getName().getString());
     }
@@ -139,7 +139,7 @@ public final class QuestManager {
 
         String nextStage = def.getStage(currentStage).map(s -> s.nextStage).orElse(null);
         store.completeCurrentStage(player.getUuid(), questId, currentStage, nextStage,
-            player.getServerWorld().getTime());
+            player.getServerWorld().getTimeOfDay());
 
         if (nextStage == null) {
             player.playSound(PonyNpcSounds.QUEST_COMPLETE, 0.8f, 1.0f);
@@ -242,7 +242,7 @@ public final class QuestManager {
 
     /** Проверяет и завершает WAIT_DAYS этапы для всех онлайн игроков. */
     public void tickWaitDays(MinecraftServer server) {
-        long worldTime = server.getOverworld().getTime();
+        long worldTime = server.getOverworld().getTimeOfDay();
         QuestStateStore store = QuestStateStore.getOrCreate(server);
 
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {

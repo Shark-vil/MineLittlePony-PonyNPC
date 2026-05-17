@@ -99,6 +99,15 @@ public class QuestStateStore extends PersistentState {
         return getState(playerUuid, questId).map(s -> s.isTargetCollected(stageId, targetId)).orElse(false);
     }
 
+    /** Полностью сбрасывает прогресс квеста для игрока. */
+    public void resetQuest(UUID playerUuid, String questId) {
+        Map<String, PlayerQuestState> quests = store.get(playerUuid);
+        if (quests != null) {
+            quests.remove(questId);
+            markDirty();
+        }
+    }
+
     // ── WAIT_DAYS ─────────────────────────────────────────────────
 
     public long getStageStartTime(UUID playerUuid, String questId, String stageId) {

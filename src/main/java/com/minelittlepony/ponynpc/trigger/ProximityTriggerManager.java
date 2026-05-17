@@ -186,6 +186,21 @@ public final class ProximityTriggerManager {
         });
     }
 
+    /** Сбрасывает все proximity-триггеры конкретного квеста для игрока. */
+    public void clearForQuest(UUID playerUuid, String questId) {
+        String prefix = playerUuid + ":" + questId + ":";
+        List<String> toRemove = new ArrayList<>();
+        for (String k : firedTriggers) {
+            if (k.startsWith(prefix)) toRemove.add(k);
+        }
+        for (String k : toRemove) {
+            firedTriggers.remove(k);
+            Entity entity = triggerEntities.remove(k);
+            if (entity != null && !entity.isRemoved()) entity.discard();
+            playersInRange.remove(k);
+        }
+    }
+
     public void clearForPlayer(UUID playerUuid) {
         String prefix = playerUuid + ":";
         List<String> toRemove = new ArrayList<>();
