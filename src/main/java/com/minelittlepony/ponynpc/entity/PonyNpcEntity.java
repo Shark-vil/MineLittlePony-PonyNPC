@@ -179,6 +179,9 @@ public class PonyNpcEntity extends PathAwareEntity implements PlayerVisibleEntit
         return "???";
     }
 
+    @Override
+    public java.util.UUID getDialogSourceUuid() { return getUuid(); }
+
     public void setNpcDisplayName(String name) {
         this.npcDisplayName = name == null ? "" : name;
         if (!this.npcDisplayName.isEmpty()) {

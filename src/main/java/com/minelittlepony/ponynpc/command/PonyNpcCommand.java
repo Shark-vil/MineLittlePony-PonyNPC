@@ -150,11 +150,12 @@ public final class PonyNpcCommand {
                 int d = DialogManager.getInstance().reload();
                 int q = QuestManager.getInstance().reload();
                 int u = DungeonRegistry.getInstance().reload();
+                int b = com.minelittlepony.ponynpc.quest.BlockZoneRegistry.getInstance().reload();
                 ctx.getSource().sendFeedback(
-                    () -> Text.literal("[PonyNPC] Reloaded " + d + " dialog(s), " + q + " quest(s), " + u + " dungeon(s)"),
+                    () -> Text.literal("[PonyNPC] Reloaded " + d + " dialog(s), " + q + " quest(s), " + u + " dungeon(s), " + b + " block_zone(s)"),
                     true
                 );
-                return d + q + u;
+                return d + q + u + b;
             }))
 
             .then(literal("list").executes(PonyNpcCommand::listDialogs))

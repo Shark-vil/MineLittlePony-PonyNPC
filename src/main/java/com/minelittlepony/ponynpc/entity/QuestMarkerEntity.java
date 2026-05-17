@@ -89,6 +89,9 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity, ID
     }
 
     @Override
+    public java.util.UUID getDialogSourceUuid() { return getUuid(); }
+
+    @Override
     public boolean isVisibleTo(ServerPlayerEntity player) {
         return visibleToPlayers.isEmpty() || visibleToPlayers.contains(player.getUuid());
     }

@@ -4,6 +4,7 @@ import com.minelittlepony.ponynpc.dialog.*;
 import com.minelittlepony.ponynpc.entity.IDialogEntity;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
 import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
+import com.minelittlepony.ponynpc.entity.VirtualDialogContext;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
@@ -12,7 +13,6 @@ import com.minelittlepony.ponynpc.state.PlayerQuestState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
 
 import net.fabricmc.fabric.api.networking.v1.*;
-import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -21,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public final class NetworkHandler {
 
@@ -71,7 +70,6 @@ public final class NetworkHandler {
 
             boolean complete = state.isComplete();
 
-            // Обходим цепочку этапов от startStage по nextStage
             List<QuestJournalPayload.StageEntry> stages = new ArrayList<>();
             Set<String> visited = new HashSet<>();
             String stageId = def.startStage;
@@ -140,7 +138,7 @@ public final class NetworkHandler {
         int soundChars = Math.max(1, dialog.soundChars);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            ((Entity) entity).getUuid(), entity.getNpcDisplayName(), dialog.id,
+            entity.getDialogSourceUuid(), entity.getNpcDisplayName(), dialog.id,
             RANDOM_NODE_ID, phrase, sound, soundChars, List.of()
         ));
     }
@@ -160,12 +158,12 @@ public final class NetworkHandler {
     private static void sendQuestNode(ServerPlayerEntity player, IDialogEntity entity,
                                       DialogData dialog, String nodeId, DialogNode node,
                                       PlayerDialogState state) {
-        String progressKey = dialog.id + ":" + ((Entity) entity).getUuidAsString();
+        String progressKey = dialog.id + ":" + entity.getDialogSourceUuid().toString();
 
         List<OpenDialogPayload.ChoiceData> choiceDataList = buildChoiceList(player, entity, node, progressKey, state);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            ((Entity) entity).getUuid(), entity.getNpcDisplayName(), dialog.id, nodeId,
+            entity.getDialogSourceUuid(), entity.getNpcDisplayName(), dialog.id, nodeId,
             node.text,
             node.sound != null ? node.sound : "",
             Math.max(1, node.soundChars),
@@ -189,7 +187,7 @@ public final class NetworkHandler {
         for (DialogChoice choice : node.choices) {
             boolean conditionMet = QuestConditionChecker.checkAll(player, choice.conditions);
 
-            if (!conditionMet && choice.hiddenIfConditionFails) continue; // скрыть
+            if (!conditionMet && choice.hiddenIfConditionFails) continue;
 
             boolean done = choice.once && state.isChoiceDone(playerUuid, progressKey, choice.id);
             result.add(new OpenDialogPayload.ChoiceData(choice.id, choice.text, done, conditionMet));
@@ -203,7 +201,6 @@ public final class NetworkHandler {
     // ══════════════════════════════════════════════════════════════
 
     private static void handleChoice(DialogChoicePayload payload, ServerPlayerEntity player) {
-        // Ghost NPC despawn при ESC
         if ("__close__".equals(payload.choiceId())) {
             handleClose(player, payload);
             return;
@@ -238,32 +235,28 @@ public final class NetworkHandler {
             return;
         }
 
-        // Серверная проверка условий (клиент не trusted)
         if (!QuestConditionChecker.checkAll(player, selected.conditions)) {
             LOGGER.warn("Player {} tried unavailable choice '{}' — conditions not met",
                 player.getName().getString(), selected.id);
             return;
         }
 
-        // Пометить once-выбор
         if (selected.once && player.getWorld() instanceof ServerWorld sw) {
-            String progressKey = dialog.id + ":" + ((Entity) entity).getUuidAsString();
+            String progressKey = dialog.id + ":" + entity.getDialogSourceUuid().toString();
             PlayerDialogState.getOrCreate(sw).markChoiceDone(player.getUuid(), progressKey, selected.id);
         }
 
-        // Выполнить действия (передаём PonyNpcEntity если есть, иначе null)
         PonyNpcEntity ponyNpc = entity instanceof PonyNpcEntity p ? p : null;
         QuestActionExecutor.executeAll(player, ponyNpc, selected.actions);
 
-        // Навигация
         if (selected.next == null) {
-            ServerPlayNetworking.send(player, new CloseDialogPayload(((Entity) entity).getUuid()));
+            ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getDialogSourceUuid()));
             closeDialogEntity(player, entity);
         } else {
             Optional<DialogNode> nextNodeOpt = dialog.getNode(selected.next);
             if (nextNodeOpt.isEmpty()) {
                 LOGGER.warn("Choice '{}' references unknown node '{}'", selected.id, selected.next);
-                ServerPlayNetworking.send(player, new CloseDialogPayload(((Entity) entity).getUuid()));
+                ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getDialogSourceUuid()));
                 closeDialogEntity(player, entity);
                 return;
             }
@@ -279,6 +272,8 @@ public final class NetworkHandler {
         IDialogEntity entity = findDialogEntity(player, payload.npcUuid());
         if (entity instanceof PonyNpcEntity ponyNpc) {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
+        } else if (entity instanceof VirtualDialogContext ctx) {
+            BlockInteractionManager.getInstance().removeContext(player.getUuid(), ctx.getDialogSourceUuid());
         }
     }
 
@@ -287,23 +282,26 @@ public final class NetworkHandler {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
         } else if (entity instanceof QuestMarkerEntity marker) {
             if (!marker.isRemoved() && !marker.isPermanent()) marker.discard();
+        } else if (entity instanceof VirtualDialogContext ctx) {
+            BlockInteractionManager.getInstance().removeContext(player.getUuid(), ctx.getDialogSourceUuid());
         }
     }
 
     // ── Утилиты ───────────────────────────────────────────────────
 
     private static IDialogEntity findDialogEntity(ServerPlayerEntity player, UUID uuid) {
-        if (!(player.getWorld() instanceof ServerWorld serverWorld)) return null;
-        for (PonyNpcEntity candidate : serverWorld.getEntitiesByType(
-            PonyNpcEntities.PONY_NPC, e -> e.getUuid().equals(uuid)
-        )) {
-            return candidate;
+        if (player.getWorld() instanceof ServerWorld serverWorld) {
+            for (PonyNpcEntity candidate : serverWorld.getEntitiesByType(
+                PonyNpcEntities.PONY_NPC, e -> e.getUuid().equals(uuid)
+            )) {
+                return candidate;
+            }
+            for (QuestMarkerEntity candidate : serverWorld.getEntitiesByType(
+                PonyNpcEntities.QUEST_MARKER, e -> e.getUuid().equals(uuid)
+            )) {
+                return candidate;
+            }
         }
-        for (QuestMarkerEntity candidate : serverWorld.getEntitiesByType(
-            PonyNpcEntities.QUEST_MARKER, e -> e.getUuid().equals(uuid)
-        )) {
-            return candidate;
-        }
-        return null;
+        return BlockInteractionManager.getInstance().getContext(player.getUuid(), uuid).orElse(null);
     }
 }

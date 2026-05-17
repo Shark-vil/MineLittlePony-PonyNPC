@@ -9,6 +9,8 @@ import com.minelittlepony.ponynpc.dungeon.DungeonRegistry;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.network.NetworkHandler;
 import com.minelittlepony.ponynpc.party.PartyManager;
+import com.minelittlepony.ponynpc.quest.BlockInteractionManager;
+import com.minelittlepony.ponynpc.quest.BlockZoneRegistry;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
@@ -46,6 +48,7 @@ public class PonyNpcMod implements ModInitializer {
         PonyNpcSounds.bootstrap();
         PonyNpcEntities.bootstrap();
         NetworkHandler.registerServer();
+        BlockInteractionManager.getInstance().register();
         PonyNpcCommand.register();
         PartyCommand.register();
         DungeonBuilderCommand.register();
@@ -60,13 +63,14 @@ public class PonyNpcMod implements ModInitializer {
 
         discoverBuiltinSkins();
 
-        // Загружаем диалоги, квесты и данжи при старте сервера
+        // Загружаем диалоги, квесты, данжи и block_zones при старте сервера
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            int dialogs  = DialogManager.getInstance().reload();
-            int quests   = QuestManager.getInstance().reload();
-            int dungeons = DungeonRegistry.getInstance().reload();
-            LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s), {} dungeon(s)",
-                dialogs, quests, dungeons);
+            int dialogs    = DialogManager.getInstance().reload();
+            int quests     = QuestManager.getInstance().reload();
+            int dungeons   = DungeonRegistry.getInstance().reload();
+            int blockZones = BlockZoneRegistry.getInstance().reload();
+            LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s), {} dungeon(s), {} block_zone(s)",
+                dialogs, quests, dungeons, blockZones);
         });
 
         // Тик: proximity-триггеры + WAIT_DAYS завершение
@@ -78,13 +82,14 @@ public class PonyNpcMod implements ModInitializer {
             }
         });
 
-        // При отключении игрока — чистим ghost NPC, proximity-триггеры, пати, данж
+        // При отключении игрока — чистим ghost NPC, proximity-триггеры, пати, данж, block contexts
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var uuid = handler.player.getUuid();
             GhostNpcManager.getInstance().despawnAll(uuid);
             ProximityTriggerManager.getInstance().clearForPlayer(uuid);
             PartyManager.getInstance().onPlayerDisconnect(uuid, server);
             DungeonInstanceManager.getInstance().onPlayerDisconnect(uuid);
+            BlockInteractionManager.getInstance().clearForPlayer(uuid);
         });
 
         // При смерти/возрождении вне dungeon-измерения — убираем из инстанса
