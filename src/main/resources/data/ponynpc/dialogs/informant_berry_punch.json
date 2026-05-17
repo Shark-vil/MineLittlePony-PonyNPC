@@ -1,0 +1,36 @@
+{
+  "id": "informant_berry_punch",
+  "nodes": {
+    "start": {
+      "text": "Добро пожаловать! Что будешь? Сок, компот, или... что посерьёзнее?",
+      "choices": [
+        {
+          "id": "ask_trixie",
+          "text": "Бэрри, ты помнишь Трикси вчера вечером?",
+          "next": "berry_story",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_origami_pieces"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Ничего, просто заглянул.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "berry_story": {
+      "text": "Трикси? Хех, ещё бы не помнить. Пила сидр, рассказывала про какую-то книгу и «великое искусство оригами». Что-то рвала на части и складывала — клочок остался на столе. Я убрала за стойку — мало ли, хозяин найдётся. Вот, держи.",
+      "choices": [
+        {
+          "id": "take_piece",
+          "text": "Это именно то! Огромное спасибо.",
+          "next": null,
+          "once": false,
+          "actions": ["quest:shadow_book_ch1:collect:find_origami_pieces:origami_piece_3"]
+        }
+      ]
+    }
+  }
+}

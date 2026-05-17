@@ -26,7 +26,6 @@
           "hidden_if_condition_fails": true,
           "actions": [
             "quest:shadow_book_ch1:take_quest_item:library_card",
-            "quest:shadow_book_ch1:give_quest_item:ruins_map",
             "quest:shadow_book_ch1:complete_stage"
           ]
         },
@@ -59,7 +58,7 @@
       ]
     },
     "access_granted": {
-      "text": "Отлично. Архив в конце зала, третья полка слева. Книга должна быть там... или в одном из сундуков. Удачи.",
+      "text": "Отлично. Добро пожаловать в архив. Третья полка слева, нижний ящик — там хранятся старые географические записи. Поищи там, что-то должно помочь найти то место.",
       "choices": [
         {
           "id": "thanks",

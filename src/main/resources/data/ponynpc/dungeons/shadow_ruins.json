@@ -1,11 +1,21 @@
 {
   "id": "shadow_ruins",
-  "name": "Shadow Ruins",
-  "generate_platform": true,
-  "platform_width": 40,
-  "platform_length": 60,
+  "name": "Руины Теней",
+  "build_origin": null,
+  "size": {"width": 50, "height": 20, "length": 70},
+  "spawn_offset": {"x": 25, "y": 1, "z": 5},
+  "finish_npc": {
+    "dialog_id": "shadow_ruins_exit",
+    "name": "Алтарь Теней",
+    "skin": "twilight_sparkle",
+    "offset": {"x": 25, "y": 1, "z": 65}
+  },
+  "fixed_time": 18000,
+  "destructible": false,
   "rewards": [
-    {"type": "currency", "count": 50},
-    {"type": "quest_item", "id": "shadow_crystal", "count": 1}
+    {"type": "currency", "count": 100},
+    {"type": "item", "id": "minecraft:iron_chestplate", "count": 1},
+    {"type": "item", "id": "minecraft:diamond_helmet", "count": 1},
+    {"type": "quest_item", "id": "shadow_book", "count": 1}
   ]
 }

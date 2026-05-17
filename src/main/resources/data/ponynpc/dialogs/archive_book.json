@@ -1,0 +1,47 @@
+{
+  "id": "archive_book",
+  "nodes": {
+    "start": {
+      "text": "Старая потрёпанная книга. На обложке — «Географические записи: забытые места Эквестрии». Раскрыть?",
+      "choices": [
+        {
+          "id": "read",
+          "text": "Открыть книгу.",
+          "next": "book_content",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_book_location"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "ignore",
+          "text": "Не сейчас.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "book_content": {
+      "text": "«...Руины именуемые в народе Тенями Предков обнаружены к северу от Понивилля, за старым яблоневым садом. Координаты входа нанесены на полях...»",
+      "choices": [
+        {
+          "id": "take_note",
+          "text": "Запомнить координаты и закрыть книгу.",
+          "next": null,
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_book_location"],
+          "hidden_if_condition_fails": true,
+          "actions": [
+            "message:[Архив] Координаты руин: X=??? Z=??? — замени на реальные в файле archive_book.json",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        },
+        {
+          "id": "close",
+          "text": "Закрыть книгу.",
+          "next": null,
+          "once": false
+        }
+      ]
+    }
+  }
+}

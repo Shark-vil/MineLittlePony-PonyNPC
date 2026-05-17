@@ -1,0 +1,76 @@
+{
+  "id": "trixie_main",
+  "nodes": {
+    "start": {
+      "text": "Великая и Могучая Трикси занята! Но... раз уж ты пришёл — говори быстро.",
+      "sound": "ponynpc:talk_magic",
+      "sound_chars": 3,
+      "choices": [
+        {
+          "id": "give_book",
+          "text": "Трикси, я нашёл Книгу Теней.",
+          "next": "trixie_takes_book",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:return_to_trixie_1"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "ask_origami",
+          "text": "Трикси, та оригами из книги... ты её помнишь?",
+          "next": "trixie_confused",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:go_to_trixie_2"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Ничего. Проходил мимо.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "trixie_takes_book": {
+      "text": "О-о-о! Дай сюда немедленно! Трикси читает... читает внимательно...",
+      "choices": [
+        {
+          "id": "hand_over",
+          "text": "Держи. Надеюсь, оно того стоило.",
+          "next": "trixie_reads",
+          "once": false,
+          "actions": ["quest:shadow_book_ch1:take_quest_item:shadow_book"]
+        }
+      ]
+    },
+    "trixie_reads": {
+      "text": "«Дорогой дневник, сегодня Твайлайт снова...» ЧТО?! ЭТО ФАНФИК О ТВАЙЛАЙТ СПАРКЛ?! ОТВРАТИТЕЛЬНЫЙ! ПОСРЕДСТВЕННЫЙ! БЕЗДАРНЫЙ ФАНФИК!!! ТВАЙЛАЙТ, ТЫ — [ЦЕНЗУРА]!!! Ты... ты вообще знаешь что написала?! ...Ладно. Зато теперь у Трикси есть отличная бумага для оригами. Искусство — это главное.",
+      "sound": "ponynpc:talk_magic",
+      "sound_chars": 3,
+      "choices": [
+        {
+          "id": "awkward",
+          "text": "Ну... рада что книга нашла применение?",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:return_to_trixie_1"],
+          "hidden_if_condition_fails": true,
+          "actions": ["quest:shadow_book_ch1:complete_stage"]
+        }
+      ]
+    },
+    "trixie_confused": {
+      "text": "Оригами? Вчера? Трикси помнит что... что была у Бон-Бон... потом у Лиры в парке... потом у Бэрри Пунч в баре... потом на вечеринке у Виниловой. Где-то там и оставила фигурки. Голова раскалывается — иди спроси у них!",
+      "choices": [
+        {
+          "id": "ok",
+          "text": "Понял. Спрошу у Бон-Бон, Лиры, Бэрри Пунч и Виниловой.",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:go_to_trixie_2"],
+          "hidden_if_condition_fails": true,
+          "actions": ["quest:shadow_book_ch1:complete_stage"]
+        }
+      ]
+    }
+  }
+}

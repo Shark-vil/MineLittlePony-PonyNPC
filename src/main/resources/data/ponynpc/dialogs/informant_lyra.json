@@ -1,0 +1,36 @@
+{
+  "id": "informant_lyra",
+  "nodes": {
+    "start": {
+      "text": "Привеет! Слушай, а ты никогда не думал что существа без копыт — это что-то... особенное?",
+      "choices": [
+        {
+          "id": "ask_trixie",
+          "text": "Лира, вчера в парке — Трикси там была?",
+          "next": "lyra_story",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_origami_pieces"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Интересный вопрос. Но мне пора идти.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "lyra_story": {
+      "text": "Трикси! Да, сидела рядом на скамейке, бормотала что-то про «оригами-арт» и «высокое искусство». Сложила фигурку и ушла, а бумажка осталась. Вот, раз ищешь — забирай.",
+      "choices": [
+        {
+          "id": "take_piece",
+          "text": "Отлично, спасибо Лира!",
+          "next": null,
+          "once": false,
+          "actions": ["quest:shadow_book_ch1:collect:find_origami_pieces:origami_piece_2"]
+        }
+      ]
+    }
+  }
+}

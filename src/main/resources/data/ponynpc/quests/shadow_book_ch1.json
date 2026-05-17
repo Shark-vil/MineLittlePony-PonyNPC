@@ -1,12 +1,12 @@
 {
   "id": "shadow_book_ch1",
-  "name": "The Shadow Book",
+  "name": "Книга Теней",
   "start_stage": "talk_to_trixie",
   "stages": {
     "talk_to_trixie": {
       "type": "dialog",
-      "description": "Поговорить с Трикси после выхода со станции",
-      "next_stage": "find_shadow_book",
+      "description": "Поговорить с Трикси у выхода со станции",
+      "next_stage": "talk_to_librarian",
       "proximity_trigger": {
         "dimension": "minecraft:overworld",
         "x": 0,
@@ -16,42 +16,35 @@
         "spawn_ghost_npc": {
           "dialog_id": "trixie_encounter_1",
           "skin": "trixie",
-          "name": "Trixie",
+          "name": "Великая и Могучая Трикси",
           "auto_dialog": true,
           "despawn_after_dialog": true
         }
       }
     },
-    "find_shadow_book": {
-      "type": "collect_quest_item",
-      "description": "Найти Книгу Теней в библиотеке",
-      "item_id": "shadow_book",
-      "next_stage": "talk_to_librarian"
-    },
     "talk_to_librarian": {
       "type": "dialog",
-      "description": "Поговорить с Библиотекарем о книге",
+      "description": "Поговорить с Библиотекарем о Книге Теней",
       "next_stage": "find_twilight"
     },
     "find_twilight": {
       "type": "dialog",
-      "description": "Получить читательский билет от Твайлайт Спаркл",
+      "description": "Получить читательский билет у Твайлайт Спаркл",
       "next_stage": "return_to_librarian"
     },
     "return_to_librarian": {
       "type": "dialog",
-      "description": "Вернуться к Библиотекарю с билетом",
+      "description": "Вернуться к Библиотекарю с читательским билетом",
       "next_stage": "find_book_location"
     },
     "find_book_location": {
-      "type": "collect_quest_item",
-      "description": "Найти книгу с координатами руин",
-      "item_id": "ruins_map",
+      "type": "dialog",
+      "description": "Найти в архиве книгу с координатами руин",
       "next_stage": "enter_ruins"
     },
     "enter_ruins": {
       "type": "dungeon",
-      "description": "Войти в руины и найти Книгу Теней (данж — Phase 2)",
+      "description": "Найти и пройти Руины Теней, достать Книгу Теней",
       "dungeon_id": "shadow_ruins",
       "next_stage": "return_to_trixie_1"
     },
@@ -62,23 +55,23 @@
     },
     "wait_for_trixie": {
       "type": "wait_days",
-      "description": "Подождать один день",
+      "description": "Подождать один игровой день",
       "days": 1,
       "next_stage": "talk_to_twilight_2"
     },
     "talk_to_twilight_2": {
       "type": "dialog",
-      "description": "Поговорить с Твайлайт о зашифрованной книге",
+      "description": "Поговорить с Твайлайт — выяснить что книга была зашифрована",
       "next_stage": "go_to_trixie_2"
     },
     "go_to_trixie_2": {
       "type": "dialog",
-      "description": "Узнать у Трикси где оригами",
+      "description": "Выяснить у Трикси где оригами из книги",
       "next_stage": "find_origami_pieces"
     },
     "find_origami_pieces": {
       "type": "multi_collect",
-      "description": "Найти все 4 фрагмента оригами по городу",
+      "description": "Собрать все 4 фрагмента оригами по городу",
       "targets": [
         "origami_piece_1",
         "origami_piece_2",
@@ -90,7 +83,7 @@
     },
     "return_to_twilight_final": {
       "type": "dialog",
-      "description": "Вернуться к Твайлайт со всеми фрагментами",
+      "description": "Вернуться к Твайлайт со всеми фрагментами оригами",
       "next_stage": null
     }
   }

@@ -1,0 +1,175 @@
+{
+  "id": "twilight_main",
+  "nodes": {
+    "start": {
+      "text": "Привет! Я Твайлайт Спаркл. Чем могу помочь?",
+      "sound": "ponynpc:talk",
+      "sound_chars": 2,
+      "choices": [
+        {
+          "id": "ask_card",
+          "text": "Мне нужен читательский билет для архива библиотеки.",
+          "next": "card_question",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "talk_book",
+          "text": "Я хотел поговорить о книге, которую нашёл в руинах.",
+          "next": "twilight_curious",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_twilight_2"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "return_origami",
+          "text": "Твайлайт, у меня все четыре фрагмента оригами.",
+          "next": "twilight_receives",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:return_to_twilight_final"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Просто хотел поздороваться.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+
+    "card_question": {
+      "text": "Читательский билет? Хм... Для чего именно тебе нужен архив?",
+      "choices": [
+        {
+          "id": "truth",
+          "text": "Я ищу старую книгу. Трикси сказала что она должна быть в библиотеке.",
+          "next": "card_trust",
+          "once": false
+        },
+        {
+          "id": "vague",
+          "text": "Научные исследования. Изучение магической истории.",
+          "next": "card_skeptic",
+          "once": false
+        }
+      ]
+    },
+    "card_skeptic": {
+      "text": "Звучит расплывчато. Докажи серьёзность — назови хотя бы одну книгу Старстрик по магии.",
+      "choices": [
+        {
+          "id": "correct",
+          "text": "«Основы структуры заклинаний» Старстрик, первый том.",
+          "next": "card_give",
+          "once": false
+        },
+        {
+          "id": "wrong",
+          "text": "Эм... «Самоучитель по магии»?",
+          "next": "card_denied",
+          "once": false
+        }
+      ]
+    },
+    "card_denied": {
+      "text": "Такой книги не существует. Извини, но я не могу дать билет кому попало.",
+      "choices": [
+        {
+          "id": "insist",
+          "text": "Погоди! Мне это действительно нужно — Трикси сама меня послала.",
+          "next": "card_trust",
+          "once": false
+        },
+        {
+          "id": "leave",
+          "text": "Ладно, вернусь позже.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "card_trust": {
+      "text": "Хорошо. Я вижу что ты честен. Держи — это мой запасной читательский билет. Обращайся с книгами аккуратно!",
+      "choices": [
+        {
+          "id": "thanks",
+          "text": "Спасибо огромное, Твайлайт!",
+          "next": null,
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": false,
+          "actions": [
+            "quest:shadow_book_ch1:give_quest_item:library_card",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        }
+      ]
+    },
+    "card_give": {
+      "text": "Ты знаком с трудами Старстрик! Это впечатляет. Держи запасной читательский билет.",
+      "choices": [
+        {
+          "id": "thanks_correct",
+          "text": "Отличная книга, кстати. Спасибо!",
+          "next": null,
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": false,
+          "actions": [
+            "quest:shadow_book_ch1:give_quest_item:library_card",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        }
+      ]
+    },
+
+    "twilight_curious": {
+      "text": "Книга из руин? Интересно... Покажи. ...О-о-о. Это же Liber Umbrarum — «Книга Теней» на старом эквестрийском! Она написана зашифрованным протоколом древних единорогов! Это невероятно редкий исторический артефакт! Где ты её взял?!",
+      "choices": [
+        {
+          "id": "trixie_made_origami",
+          "text": "Ну... у Трикси была. Она сделала из неё оригами.",
+          "next": "twilight_shocked",
+          "once": false
+        }
+      ]
+    },
+    "twilight_shocked": {
+      "text": "ЧТО?! ОРИГАМИ?! ИЗ LIBER UMBRARUM?! ...Спокойно. Спокойно, Твайлайт. Если страницы целы — я смогу её восстановить. Пожалуйста, найди все фрагменты и принеси мне. Немедленно. Пожалуйста.",
+      "choices": [
+        {
+          "id": "find_them",
+          "text": "Попробую. Трикси сказала что оставила их по всему городу.",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_twilight_2"],
+          "hidden_if_condition_fails": true,
+          "actions": ["quest:shadow_book_ch1:complete_stage"]
+        }
+      ]
+    },
+
+    "twilight_receives": {
+      "text": "Все четыре? Дай посмотрю... Да! Вот они все, страницы совпадают! Я смогу расшифровать текст — это займёт время, но... это невероятная находка. Ты только что помог сохранить бесценный исторический артефакт, спасибо!",
+      "choices": [
+        {
+          "id": "glad_to_help",
+          "text": "Рад что помог. Это было... незабываемое приключение.",
+          "next": null,
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:return_to_twilight_final"],
+          "hidden_if_condition_fails": true,
+          "actions": [
+            "quest:shadow_book_ch1:give_currency:300",
+            "quest:shadow_book_ch1:give_item:minecraft:totem_of_undying:1",
+            "quest:shadow_book_ch1:give_item:minecraft:golden_apple:3",
+            "quest:shadow_book_ch1:give_item:minecraft:diamond_hoe:1",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "informant_bon_bon",
+  "nodes": {
+    "start": {
+      "text": "Привет! Добро пожаловать в мою конфетную лавку. Чем могу помочь?",
+      "choices": [
+        {
+          "id": "ask_trixie",
+          "text": "Бон-Бон, ты вчера видела Трикси?",
+          "next": "bon_bon_story",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_origami_pieces"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Просто смотрю, спасибо.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "bon_bon_story": {
+      "text": "Трикси? Да, заходила вчера вечером! Купила карамели, была в прекрасном настроении. Что-то складывала из бумаги прямо на прилавке — и оставила фигурку. Вот, держи — мне она ни к чему.",
+      "choices": [
+        {
+          "id": "take_piece",
+          "text": "Спасибо, Бон-Бон! Это именно то что я искал.",
+          "next": null,
+          "once": false,
+          "actions": ["quest:shadow_book_ch1:collect:find_origami_pieces:origami_piece_1"]
+        }
+      ]
+    }
+  }
+}

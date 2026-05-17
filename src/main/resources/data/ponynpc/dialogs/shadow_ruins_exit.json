@@ -1,0 +1,23 @@
+{
+  "id": "shadow_ruins_exit",
+  "nodes": {
+    "start": {
+      "text": "На алтаре лежит «Книга Теней». Она излучает слабое тёмное свечение. Готов забрать её и покинуть это место?",
+      "choices": [
+        {
+          "id": "complete",
+          "text": "Да. Взять книгу и выйти.",
+          "next": null,
+          "once": false,
+          "actions": ["dungeon:complete"]
+        },
+        {
+          "id": "wait",
+          "text": "Подождать — мне нужно ещё осмотреться.",
+          "next": null,
+          "once": false
+        }
+      ]
+    }
+  }
+}

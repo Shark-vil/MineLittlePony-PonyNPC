@@ -1,0 +1,36 @@
+{
+  "id": "informant_vinyl",
+  "nodes": {
+    "start": {
+      "text": "Йо! Ты пришёл послушать музыку — или просто мимо проходил?",
+      "choices": [
+        {
+          "id": "ask_trixie",
+          "text": "Виниловая, Трикси вчера у тебя на вечеринке была?",
+          "next": "vinyl_story",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:find_origami_pieces"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Мимо проходил. Пока!",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "vinyl_story": {
+      "text": "Трикси? Ха, ну и тусовщица. Нагрянула под конец, потанцевала, потом сидела в углу и что-то складывала из бумаги — говорила «это искусство». Оставила фигурку на колонке. Во, держи — мне некуда её девать.",
+      "choices": [
+        {
+          "id": "take_piece",
+          "text": "Отлично! Последний фрагмент. Спасибо, Виниловая!",
+          "next": null,
+          "once": false,
+          "actions": ["quest:shadow_book_ch1:collect:find_origami_pieces:origami_piece_4"]
+        }
+      ]
+    }
+  }
+}

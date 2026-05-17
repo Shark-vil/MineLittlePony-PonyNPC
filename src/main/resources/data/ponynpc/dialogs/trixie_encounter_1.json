@@ -10,9 +10,7 @@
           "id": "ask_about_town",
           "text": "Здравствуй. Что это за место?",
           "next": "about_ponyville",
-          "once": false,
-          "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
-          "hidden_if_condition_fails": false
+          "once": false
         },
         {
           "id": "ask_favor",
