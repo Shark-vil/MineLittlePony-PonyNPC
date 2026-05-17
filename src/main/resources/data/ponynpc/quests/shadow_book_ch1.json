@@ -12,7 +12,7 @@
         "x": 0,
         "y": 64,
         "z": 0,
-        "radius": 15.0,
+        "radius": 5,
         "spawn_ghost_npc": {
           "dialog_id": "trixie_encounter_1",
           "skin": "trixie",

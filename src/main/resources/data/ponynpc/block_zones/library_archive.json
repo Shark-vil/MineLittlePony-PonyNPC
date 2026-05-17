@@ -1,16 +1,16 @@
 {
   "id": "library_archive",
-  "condition": "quest:shadow_book_ch1:stage:find_book_in_archive",
+  "condition": "quest:shadow_book_ch1:stage:find_book_location",
   "world": "minecraft:overworld",
   "min_x": -100, "min_y": 60, "min_z": -100,
   "max_x": -80,  "max_y": 75, "max_z": -80,
   "target_block": "minecraft:bookshelf",
-  "default_dialog": "library_random_shelf",
+  "default_dialog": "library_shelf_random",
   "default_name": "Книжная полка",
   "blocks": [
     {
       "x": -90, "y": 64, "z": -90,
-      "dialog": "library_shadow_book_shelf",
+      "dialog": "archive_book",
       "name": "Полка с загадочной книгой"
     }
   ]
