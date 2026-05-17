@@ -1,5 +1,6 @@
 package com.minelittlepony.ponynpc;
 
+import com.minelittlepony.ponynpc.command.DungeonBuilderCommand;
 import com.minelittlepony.ponynpc.command.PartyCommand;
 import com.minelittlepony.ponynpc.command.PonyNpcCommand;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
@@ -16,8 +17,10 @@ import com.minelittlepony.ponynpc.trigger.ProximityTriggerManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.network.ServerPlayerEntity;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +46,19 @@ public class PonyNpcMod implements ModInitializer {
         NetworkHandler.registerServer();
         PonyNpcCommand.register();
         PartyCommand.register();
+        DungeonBuilderCommand.register();
+
+        // Block break protection: deny breaking in dungeon instances unless destructible = true
+        PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
+            if (!(player instanceof ServerPlayerEntity sp)) return true;
+            if (!world.getRegistryKey().equals(DungeonInstanceManager.DUNGEON_WORLD_KEY)) return true;
+            // Admins not inside an active instance can always break (for building)
+            return DungeonInstanceManager.getInstance().getInstance(sp.getUuid())
+                .map(inst -> DungeonRegistry.getInstance().getDungeon(inst.dungeonId)
+                    .map(def -> def.destructible)
+                    .orElse(false))
+                .orElse(true); // not in instance → allow (admin building)
+        });
 
         discoverBuiltinSkins();
 

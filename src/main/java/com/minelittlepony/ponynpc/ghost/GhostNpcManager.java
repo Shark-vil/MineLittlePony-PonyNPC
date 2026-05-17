@@ -88,6 +88,39 @@ public final class GhostNpcManager {
         LOGGER.debug("Despawned all ghost NPCs for player {}", playerUuid);
     }
 
+    /**
+     * Спавнит ghost NPC в фиксированной позиции мира, видимый всем участникам данжа.
+     * Используется для NPC завершения данжа.
+     */
+    public PonyNpcEntity spawnGhostNpcAtPos(List<ServerPlayerEntity> participants,
+                                            ServerWorld world,
+                                            double x, double y, double z,
+                                            GhostNpcSpawnConfig config) {
+        PonyNpcEntity npc = PonyNpcEntities.PONY_NPC.create(world);
+        if (npc == null) { LOGGER.error("Failed to create ghost NPC entity at pos"); return null; }
+
+        npc.refreshPositionAndAngles(x, y, z, 0f, 0f);
+        npc.initialize(world, world.getLocalDifficulty(npc.getBlockPos()), SpawnReason.COMMAND, null);
+        npc.setPersistent();
+
+        npc.setDialogId(config.dialogId);
+        if (config.skin != null && !config.skin.isEmpty()) npc.setSkinId(config.skin);
+        npc.setNpcDisplayName(config.name);
+        npc.setStationary(true);
+        npc.setGhostNpc(true);
+        npc.setDespawnAfterDialog(config.despawnAfterDialog);
+
+        for (ServerPlayerEntity p : participants) {
+            npc.addVisibleTo(p.getUuid());
+            playerGhosts.computeIfAbsent(p.getUuid(), u -> new ArrayList<>()).add(npc);
+        }
+
+        world.spawnEntityAndPassengers(npc);
+        LOGGER.debug("Spawned dungeon ghost NPC '{}' at {},{},{} for {} participant(s)",
+            config.name, x, y, z, participants.size());
+        return npc;
+    }
+
     /** Вызывается из NetworkHandler когда диалог закрывается. */
     public void onDialogClosed(UUID playerUuid, PonyNpcEntity npc) {
         if (npc.isGhostNpc() && npc.isDespawnAfterDialog()) {

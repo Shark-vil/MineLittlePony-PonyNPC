@@ -38,6 +38,13 @@ public final class QuestActionExecutor {
     /** Выполняет одно действие. */
     public static void execute(ServerPlayerEntity player, PonyNpcEntity npc, String action) {
         if (action == null || action.isBlank()) return;
+
+        // message: handled before split — colons are allowed in the text body
+        if (action.startsWith("message:")) {
+            player.sendMessage(Text.literal(action.substring(8)), false);
+            return;
+        }
+
         String[] parts = action.split(":");
 
         if ("quest".equals(parts[0])) {

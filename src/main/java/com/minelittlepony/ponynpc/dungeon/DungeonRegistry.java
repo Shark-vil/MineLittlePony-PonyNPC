@@ -78,4 +78,9 @@ public final class DungeonRegistry {
     }
 
     public Set<String> getDungeonIds() { return Collections.unmodifiableSet(dungeons.keySet()); }
+
+    /** Returns a unique build-zone slot index for a new dungeon (slot → negative X side of dimension). */
+    public int getNextBuildSlot() {
+        return dungeons.size() + 1;
+    }
 }

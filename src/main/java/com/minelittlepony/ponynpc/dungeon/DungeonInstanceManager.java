@@ -1,10 +1,13 @@
 package com.minelittlepony.ponynpc.dungeon;
 
+import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.party.Party;
 import com.minelittlepony.ponynpc.party.PartyManager;
+import com.minelittlepony.ponynpc.quest.GhostNpcSpawnConfig;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.network.packet.s2c.play.PositionFlag;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -12,15 +15,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-import net.minecraft.network.packet.s2c.play.PositionFlag;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-/** Управляет активными инстансами данжей. */
+/** Управляет активными инстансами данжей (вход, выход, завершение, очистка). */
 public final class DungeonInstanceManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC/DungeonInstance");
@@ -29,7 +32,6 @@ public final class DungeonInstanceManager {
     public static final RegistryKey<World> DUNGEON_WORLD_KEY =
         RegistryKey.of(RegistryKeys.WORLD, Identifier.of("ponynpc", "dungeon"));
 
-    /** UUID игрока → его инстанс. */
     private final Map<UUID, DungeonInstance> playerInstance = new HashMap<>();
     private int nextSlot = 0;
     private final Deque<Integer> freeSlots = new ArrayDeque<>();
@@ -38,7 +40,7 @@ public final class DungeonInstanceManager {
 
     public static DungeonInstanceManager getInstance() { return INSTANCE; }
 
-    // ── API ───────────────────────────────────────────────────────
+    // ── Запросы ───────────────────────────────────────────────────
 
     public boolean isInDungeon(UUID playerUuid) {
         return playerInstance.containsKey(playerUuid);
@@ -53,9 +55,11 @@ public final class DungeonInstanceManager {
         return Optional.ofNullable(playerInstance.get(playerUuid));
     }
 
+    // ── Вход ─────────────────────────────────────────────────────
+
     /**
      * Войти в данж.
-     * Если игрок — лидер пати, вся пати входит вместе (solo иначе).
+     * Если игрок — лидер пати, вся пати входит вместе.
      */
     public boolean enterDungeon(ServerPlayerEntity leader, String dungeonId, MinecraftServer server) {
         if (playerInstance.containsKey(leader.getUuid())) {
@@ -67,6 +71,11 @@ public final class DungeonInstanceManager {
             leader.sendMessage(Text.literal("[Dungeon] Unknown dungeon: " + dungeonId), false);
             return false;
         }
+        if (!def.hasBuildOrigin()) {
+            leader.sendMessage(Text.literal("[Dungeon] Dungeon '" + dungeonId
+                + "' has no build zone. Use /dungeon save " + dungeonId + "."), false);
+            return false;
+        }
         ServerWorld dungeonWorld = server.getWorld(DUNGEON_WORLD_KEY);
         if (dungeonWorld == null) {
             LOGGER.error("Dungeon world '{}' is not loaded!", DUNGEON_WORLD_KEY.getValue());
@@ -74,10 +83,7 @@ public final class DungeonInstanceManager {
             return false;
         }
 
-        int slotId = allocateSlot();
-        DungeonInstance inst = new DungeonInstance(slotId, dungeonId);
-
-        // Collect participants: leader + party members (if leader leads a party)
+        // Collect participants
         List<ServerPlayerEntity> participants = new ArrayList<>();
         participants.add(leader);
         Party party = PartyManager.getInstance().getParty(leader.getUuid()).orElse(null);
@@ -95,18 +101,27 @@ public final class DungeonInstanceManager {
             }
         }
 
-        // Generate platform before teleporting
-        if (def.generatePlatform) {
-            int ox = inst.getCenterX() - def.platformWidth  / 2;
-            int oz = inst.getCenterZ() - def.platformLength / 2;
-            DungeonGenerator.generatePlatform(dungeonWorld, ox, 64, oz,
-                def.platformWidth, def.platformLength);
+        int slotId = allocateSlot();
+        DungeonInstance inst = new DungeonInstance(slotId, dungeonId);
+        BlockPos srcOrigin = new BlockPos(def.buildOrigin.x, def.buildOrigin.y, def.buildOrigin.z);
+        BlockPos dstOrigin = inst.getSlotOrigin(def);
+
+        // Copy dungeon blocks from build zone to player slot
+        DungeonCopier.copy(dungeonWorld, srcOrigin, dstOrigin, def.getWidth(), def.getHeight(), def.getLength());
+
+        // Apply time of day
+        if (def.fixedTime != null) {
+            dungeonWorld.setTimeOfDay(def.fixedTime);
         }
 
-        // Spawn position: just inside the entrance (south end)
-        double spawnX = inst.getCenterX() + 0.5;
-        double spawnY = 65;
-        double spawnZ = inst.getCenterZ() - def.platformLength / 2.0 + 2.5;
+        // Player spawn position in the slot
+        double spawnX = dstOrigin.getX() + def.spawnOffset.x + 0.5;
+        double spawnY = dstOrigin.getY() + def.spawnOffset.y;
+        double spawnZ = dstOrigin.getZ() + def.spawnOffset.z + 0.5;
+
+        // Build list of UUIDs for ghost NPC visibility
+        List<UUID> uuids = new ArrayList<>();
+        for (ServerPlayerEntity p : participants) uuids.add(p.getUuid());
 
         for (ServerPlayerEntity player : participants) {
             DungeonInstance.ReturnData ret = new DungeonInstance.ReturnData(
@@ -120,27 +135,47 @@ public final class DungeonInstanceManager {
             player.sendMessage(Text.literal("[Dungeon] You entered: " + def.name), false);
         }
 
-        LOGGER.info("Dungeon '{}' instance created in slot {} with {} player(s)",
+        // Spawn finish NPC (visible to all participants, requires interaction)
+        if (def.finishNpc != null && !def.finishNpc.dialogId.isEmpty()) {
+            double npcX = dstOrigin.getX() + def.finishNpc.offset.x + 0.5;
+            double npcY = dstOrigin.getY() + def.finishNpc.offset.y;
+            double npcZ = dstOrigin.getZ() + def.finishNpc.offset.z + 0.5;
+
+            GhostNpcSpawnConfig cfg = new GhostNpcSpawnConfig();
+            cfg.dialogId = def.finishNpc.dialogId;
+            cfg.name = def.finishNpc.name;
+            cfg.skin = def.finishNpc.skin;
+            cfg.autoDialog = false;        // игрок должен сам подойти и нажать
+            cfg.despawnAfterDialog = false; // живёт до конца данжа
+
+            GhostNpcManager.getInstance().spawnGhostNpcAtPos(
+                participants, dungeonWorld, npcX, npcY, npcZ, cfg);
+        }
+
+        LOGGER.info("Dungeon '{}' instance created in slot {} for {} player(s)",
             dungeonId, slotId, participants.size());
         return true;
     }
 
-    /** Выйти из данжа без наград. */
+    // ── Выход (без наград) ────────────────────────────────────────
+
     public boolean exitDungeon(ServerPlayerEntity player, MinecraftServer server) {
         DungeonInstance inst = playerInstance.get(player.getUuid());
         if (inst == null) {
             player.sendMessage(Text.literal("[Dungeon] You are not in a dungeon."), false);
             return false;
         }
+        GhostNpcManager.getInstance().despawnAll(player.getUuid());
         teleportBack(player, inst, server);
-        removeFromInstance(player.getUuid(), inst);
+        removeFromInstance(player.getUuid(), inst, server);
         player.sendMessage(Text.literal("[Dungeon] You left the dungeon."), false);
         return true;
     }
 
+    // ── Завершение (с наградами) ──────────────────────────────────
+
     /**
-     * Завершить данж: выдать награды всем участникам и телепортировать назад.
-     * Вызывается action "dungeon:complete:<id>" через QuestActionExecutor.
+     * Завершить данж: дать награды всем участникам, телепортировать назад, очистить слот.
      */
     public boolean completeDungeon(ServerPlayerEntity triggerPlayer, MinecraftServer server) {
         DungeonInstance inst = playerInstance.get(triggerPlayer.getUuid());
@@ -148,31 +183,36 @@ public final class DungeonInstanceManager {
             triggerPlayer.sendMessage(Text.literal("[Dungeon] You are not in a dungeon."), false);
             return false;
         }
-        if (inst.isCompleted()) return false; // prevent double-complete
+        if (inst.isCompleted()) return false;
         inst.markCompleted();
 
         DungeonDefinition def = DungeonRegistry.getInstance().getDungeon(inst.dungeonId).orElse(null);
-        for (UUID memberId : new HashSet<>(inst.getPlayers())) {
+        Set<UUID> members = new HashSet<>(inst.getPlayers());
+
+        for (UUID memberId : members) {
             ServerPlayerEntity member = server.getPlayerManager().getPlayer(memberId);
             if (member != null) {
                 if (def != null) giveRewards(member, def);
+                GhostNpcManager.getInstance().despawnAll(memberId);
                 teleportBack(member, inst, server);
                 member.sendMessage(Text.literal("[Dungeon] Dungeon completed! Rewards given."), false);
             }
             playerInstance.remove(memberId);
         }
+
+        clearSlot(inst, def, server);
         freeSlots.add(inst.slotId);
         LOGGER.info("Dungeon '{}' completed (slot {})", inst.dungeonId, inst.slotId);
         return true;
     }
 
-    /** Вызывается при дисконнекте — убирает игрока из инстанса без телепорта. */
+    // ── Дисконнект ────────────────────────────────────────────────
+
     public void onPlayerDisconnect(UUID uuid) {
         DungeonInstance inst = playerInstance.remove(uuid);
-        if (inst != null) {
-            inst.removePlayer(uuid);
-            if (inst.isEmpty()) freeSlots.add(inst.slotId);
-        }
+        if (inst == null) return;
+        inst.removePlayer(uuid);
+        if (inst.isEmpty()) freeSlots.add(inst.slotId);
     }
 
     // ── Внутренние методы ─────────────────────────────────────────
@@ -181,10 +221,22 @@ public final class DungeonInstanceManager {
         return freeSlots.isEmpty() ? nextSlot++ : freeSlots.poll();
     }
 
-    private void removeFromInstance(UUID uuid, DungeonInstance inst) {
+    private void removeFromInstance(UUID uuid, DungeonInstance inst, MinecraftServer server) {
         playerInstance.remove(uuid);
         inst.removePlayer(uuid);
-        if (inst.isEmpty()) freeSlots.add(inst.slotId);
+        if (inst.isEmpty()) {
+            DungeonDefinition def = DungeonRegistry.getInstance().getDungeon(inst.dungeonId).orElse(null);
+            clearSlot(inst, def, server);
+            freeSlots.add(inst.slotId);
+        }
+    }
+
+    private void clearSlot(DungeonInstance inst, DungeonDefinition def, MinecraftServer server) {
+        if (def == null || !def.hasBuildOrigin()) return;
+        ServerWorld dungeonWorld = server.getWorld(DUNGEON_WORLD_KEY);
+        if (dungeonWorld == null) return;
+        BlockPos origin = inst.getSlotOrigin(def);
+        DungeonCopier.clear(dungeonWorld, origin, def.getWidth(), def.getHeight(), def.getLength());
     }
 
     private void teleportBack(ServerPlayerEntity player, DungeonInstance inst, MinecraftServer server) {
