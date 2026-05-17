@@ -16,6 +16,10 @@ public final class ZoneBuilderSession {
     public BlockPos pos2;
     public RegistryKey<World> world;
     public final List<MarkedBlock> blocks = new ArrayList<>();
+    /** Пул диалогов по умолчанию (random). */
+    public final List<String> defaultDialogs = new ArrayList<>();
+    /** Группы random_picks. */
+    public final List<RandomPick> randomPicks = new ArrayList<>();
 
     private ZoneBuilderSession() {}
 
@@ -63,6 +67,16 @@ public final class ZoneBuilderSession {
 
         public String format() {
             return "(" + x + "," + y + "," + z + ") → " + dialog + (name.isEmpty() ? "" : " [" + name + "]");
+        }
+    }
+
+    public static final class RandomPick {
+        public int count;
+        public String dialog;
+        public String name;
+
+        public String format() {
+            return "×" + count + " → " + dialog + (name.isEmpty() ? "" : " [" + name + "]");
         }
     }
 }
