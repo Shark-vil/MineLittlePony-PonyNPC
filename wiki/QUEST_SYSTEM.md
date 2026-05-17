@@ -46,8 +46,7 @@
 | `collect_quest_item` | Получить квестовый предмет | Автоматически при `give_quest_item` с нужным `item_id` |
 | `wait_days` | Подождать N игровых дней | Автоматически через 24000×N тиков |
 | `multi_collect` | Собрать N уникальных целей | Через action `quest:<id>:collect:<stageId>:<targetId>` |
-| `dungeon` | Пройти данж | Phase 2 |
-| `mini_game` | Мини-игра | Phase 3+ |
+| `dungeon` | Пройти данж | Автоматически при завершении данжа (`dungeon:complete`) |
 
 ### Поля типа `wait_days`
 
@@ -71,6 +70,18 @@
 ```
 
 Если `required_count = 0`, требуются все targets.
+
+### Поля типа `dungeon`
+
+```json
+{
+  "type": "dungeon",
+  "dungeon_id": "shadow_ruins",
+  "next_stage": "return_to_trixie_1"
+}
+```
+
+Этап завершается автоматически когда игрок завершает данж с указанным `dungeon_id` (action `dungeon:complete`).
 
 ---
 
