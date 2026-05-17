@@ -1,5 +1,6 @@
 package com.minelittlepony.ponynpc.entity;
 
+import com.minelittlepony.ponynpc.network.NetworkHandler;
 import com.minelittlepony.ponynpc.quest.QuestActionExecutor;
 
 import net.minecraft.entity.Entity;
@@ -21,11 +22,11 @@ import java.util.*;
  * Видима только конкретным игрокам (реализует PlayerVisibleEntity).
  * По ПКМ выполняет список quest-actions и исчезает.
  */
-public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity {
+public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity, IDialogEntity {
 
-    // Действия выполняемые при ПКМ — только серверная сторона, синхронизировать не нужно
     private List<String> actions = new ArrayList<>();
     private final Set<UUID> visibleToPlayers = new HashSet<>();
+    private String dialogId = "";
 
     public QuestMarkerEntity(EntityType<? extends QuestMarkerEntity> type, World world) {
         super(type, world);
@@ -38,6 +39,25 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity {
         this.setCustomName(Text.literal(name));
         this.actions = new ArrayList<>(actions);
         this.visibleToPlayers.add(visibleTo);
+    }
+
+    public void setDialogId(String id) {
+        this.dialogId = id != null ? id : "";
+    }
+
+    @Override
+    public String getDialogId() {
+        return dialogId;
+    }
+
+    @Override
+    public String getNpcDisplayName() {
+        return getCustomName() != null ? getCustomName().getString() : "";
+    }
+
+    @Override
+    public String getUuidAsString() {
+        return getUuid().toString();
     }
 
     public void addVisibleTo(UUID uuid) {
@@ -53,8 +73,12 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity {
     public ActionResult interact(PlayerEntity player, Hand hand) {
         if (!getWorld().isClient() && player instanceof ServerPlayerEntity sp
                 && isVisibleTo(sp)) {
-            QuestActionExecutor.executeAll(sp, null, actions);
-            this.discard();
+            if (!dialogId.isEmpty()) {
+                NetworkHandler.openDialogForPlayer(sp, this);
+            } else {
+                QuestActionExecutor.executeAll(sp, null, actions);
+                this.discard();
+            }
             return ActionResult.SUCCESS;
         }
         return ActionResult.success(getWorld().isClient());

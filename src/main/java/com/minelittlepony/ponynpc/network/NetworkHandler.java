@@ -1,7 +1,9 @@
 package com.minelittlepony.ponynpc.network;
 
 import com.minelittlepony.ponynpc.dialog.*;
+import com.minelittlepony.ponynpc.entity.IDialogEntity;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
+import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
@@ -108,8 +110,8 @@ public final class NetworkHandler {
     //  ОТКРЫТИЕ ДИАЛОГА
     // ══════════════════════════════════════════════════════════════
 
-    public static void openDialogForPlayer(ServerPlayerEntity player, PonyNpcEntity npc) {
-        String dialogId = npc.getDialogId();
+    public static void openDialogForPlayer(ServerPlayerEntity player, IDialogEntity entity) {
+        String dialogId = entity.getDialogId();
         if (dialogId.isEmpty()) {
             player.sendMessage(Text.literal("[PonyNPC] This NPC has no dialog configured."), false);
             return;
@@ -124,46 +126,45 @@ public final class NetworkHandler {
         DialogData dialog = dialogOpt.get();
 
         switch (dialog.mode) {
-            case RANDOM -> openRandomDialog(player, npc, dialog);
-            case QUEST  -> openQuestDialog(player, npc, dialog);
+            case RANDOM -> openRandomDialog(player, entity, dialog);
+            case QUEST  -> openQuestDialog(player, entity, dialog);
         }
     }
 
     // ── RANDOM ────────────────────────────────────────────────────
 
-    private static void openRandomDialog(ServerPlayerEntity player, PonyNpcEntity npc, DialogData dialog) {
+    private static void openRandomDialog(ServerPlayerEntity player, IDialogEntity entity, DialogData dialog) {
         String phrase = dialog.getRandomPhrase().orElse("...");
         String sound = (dialog.sound != null && !dialog.sound.isEmpty()) ? dialog.sound : "ponynpc:talk";
         int soundChars = Math.max(1, dialog.soundChars);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            npc.getUuid(), npc.getNpcDisplayName(), dialog.id,
+            entity.getUuid(), entity.getNpcDisplayName(), dialog.id,
             RANDOM_NODE_ID, phrase, sound, soundChars, List.of()
         ));
     }
 
     // ── QUEST ─────────────────────────────────────────────────────
 
-    private static void openQuestDialog(ServerPlayerEntity player, PonyNpcEntity npc, DialogData dialog) {
+    private static void openQuestDialog(ServerPlayerEntity player, IDialogEntity entity, DialogData dialog) {
         Optional<DialogNode> startNodeOpt = dialog.getNode("start");
         if (startNodeOpt.isEmpty()) {
             player.sendMessage(Text.literal("[PonyNPC] Dialog '" + dialog.id + "' has no 'start' node."), false);
             return;
         }
         PlayerDialogState state = PlayerDialogState.getOrCreate(player.getServerWorld());
-        sendQuestNode(player, npc, dialog, "start", startNodeOpt.get(), state);
+        sendQuestNode(player, entity, dialog, "start", startNodeOpt.get(), state);
     }
 
-    private static void sendQuestNode(ServerPlayerEntity player, PonyNpcEntity npc,
+    private static void sendQuestNode(ServerPlayerEntity player, IDialogEntity entity,
                                       DialogData dialog, String nodeId, DialogNode node,
                                       PlayerDialogState state) {
-        UUID playerUuid = player.getUuid();
-        String progressKey = dialog.id + ":" + npc.getUuidAsString();
+        String progressKey = dialog.id + ":" + entity.getUuidAsString();
 
-        List<OpenDialogPayload.ChoiceData> choiceDataList = buildChoiceList(player, npc, node, progressKey, state);
+        List<OpenDialogPayload.ChoiceData> choiceDataList = buildChoiceList(player, entity, node, progressKey, state);
 
         ServerPlayNetworking.send(player, new OpenDialogPayload(
-            npc.getUuid(), npc.getNpcDisplayName(), dialog.id, nodeId,
+            entity.getUuid(), entity.getNpcDisplayName(), dialog.id, nodeId,
             node.text,
             node.sound != null ? node.sound : "",
             Math.max(1, node.soundChars),
@@ -177,7 +178,7 @@ public final class NetworkHandler {
      * - hiddenIfConditionFails=false && условие не выполнено → включаем с available=false
      */
     private static List<OpenDialogPayload.ChoiceData> buildChoiceList(ServerPlayerEntity player,
-                                                                       PonyNpcEntity npc,
+                                                                       IDialogEntity entity,
                                                                        DialogNode node,
                                                                        String progressKey,
                                                                        PlayerDialogState state) {
@@ -208,10 +209,10 @@ public final class NetworkHandler {
         }
         if (RANDOM_NODE_ID.equals(payload.nodeId())) return;
 
-        PonyNpcEntity npc = findNpc(player, payload.npcUuid());
-        if (npc == null) return;
+        IDialogEntity entity = findDialogEntity(player, payload.npcUuid());
+        if (entity == null) return;
 
-        String dialogId = npc.getDialogId();
+        String dialogId = entity.getDialogId();
         Optional<DialogData> dialogOpt = DialogManager.getInstance().getDialog(dialogId);
         if (dialogOpt.isEmpty()) return;
 
@@ -245,46 +246,60 @@ public final class NetworkHandler {
 
         // Пометить once-выбор
         if (selected.once && player.getWorld() instanceof ServerWorld sw) {
-            String progressKey = dialog.id + ":" + npc.getUuidAsString();
+            String progressKey = dialog.id + ":" + entity.getUuidAsString();
             PlayerDialogState.getOrCreate(sw).markChoiceDone(player.getUuid(), progressKey, selected.id);
         }
 
-        // Выполнить действия
-        QuestActionExecutor.executeAll(player, npc, selected.actions);
+        // Выполнить действия (передаём PonyNpcEntity если есть, иначе null)
+        PonyNpcEntity ponyNpc = entity instanceof PonyNpcEntity p ? p : null;
+        QuestActionExecutor.executeAll(player, ponyNpc, selected.actions);
 
         // Навигация
         if (selected.next == null) {
-            ServerPlayNetworking.send(player, new CloseDialogPayload(npc.getUuid()));
-            GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), npc);
+            ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getUuid()));
+            closeDialogEntity(player, entity);
         } else {
             Optional<DialogNode> nextNodeOpt = dialog.getNode(selected.next);
             if (nextNodeOpt.isEmpty()) {
                 LOGGER.warn("Choice '{}' references unknown node '{}'", selected.id, selected.next);
-                ServerPlayNetworking.send(player, new CloseDialogPayload(npc.getUuid()));
-                GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), npc);
+                ServerPlayNetworking.send(player, new CloseDialogPayload(entity.getUuid()));
+                closeDialogEntity(player, entity);
                 return;
             }
             PlayerDialogState dialogState = player.getWorld() instanceof ServerWorld sw
                 ? PlayerDialogState.getOrCreate(sw) : null;
             if (dialogState != null) {
-                sendQuestNode(player, npc, dialog, selected.next, nextNodeOpt.get(), dialogState);
+                sendQuestNode(player, entity, dialog, selected.next, nextNodeOpt.get(), dialogState);
             }
         }
     }
 
     private static void handleClose(ServerPlayerEntity player, DialogChoicePayload payload) {
-        PonyNpcEntity npc = findNpc(player, payload.npcUuid());
-        if (npc != null) {
-            GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), npc);
+        IDialogEntity entity = findDialogEntity(player, payload.npcUuid());
+        if (entity instanceof PonyNpcEntity ponyNpc) {
+            GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
+        }
+    }
+
+    private static void closeDialogEntity(ServerPlayerEntity player, IDialogEntity entity) {
+        if (entity instanceof PonyNpcEntity ponyNpc) {
+            GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
+        } else if (entity instanceof QuestMarkerEntity marker) {
+            if (!marker.isRemoved()) marker.discard();
         }
     }
 
     // ── Утилиты ───────────────────────────────────────────────────
 
-    private static PonyNpcEntity findNpc(ServerPlayerEntity player, UUID uuid) {
+    private static IDialogEntity findDialogEntity(ServerPlayerEntity player, UUID uuid) {
         if (!(player.getWorld() instanceof ServerWorld serverWorld)) return null;
         for (PonyNpcEntity candidate : serverWorld.getEntitiesByType(
             PonyNpcEntities.PONY_NPC, e -> e.getUuid().equals(uuid)
+        )) {
+            return candidate;
+        }
+        for (QuestMarkerEntity candidate : serverWorld.getEntitiesByType(
+            PonyNpcEntities.QUEST_MARKER, e -> e.getUuid().equals(uuid)
         )) {
             return candidate;
         }
