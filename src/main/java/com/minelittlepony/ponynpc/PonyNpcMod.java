@@ -3,6 +3,7 @@ package com.minelittlepony.ponynpc;
 import com.minelittlepony.ponynpc.command.DungeonBuilderCommand;
 import com.minelittlepony.ponynpc.command.PartyCommand;
 import com.minelittlepony.ponynpc.command.PonyNpcCommand;
+import com.minelittlepony.ponynpc.command.ZoneBuilderCommand;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
 import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
 import com.minelittlepony.ponynpc.dungeon.DungeonRegistry;
@@ -52,6 +53,7 @@ public class PonyNpcMod implements ModInitializer {
         PonyNpcCommand.register();
         PartyCommand.register();
         DungeonBuilderCommand.register();
+        ZoneBuilderCommand.register();
 
         // Block break protection: deny breaking original dungeon blocks; allow breaking own placed blocks
         PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
