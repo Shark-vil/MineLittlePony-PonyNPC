@@ -18,8 +18,9 @@ public class DungeonDefinition {
     /** Куда ставить игрока при входе (смещение от buildOrigin/slotOrigin). */
     @SerializedName("spawn_offset") public IntVec3 spawnOffset = new IntVec3(25, 1, 5);
 
-    // ── NPC финиша (спаунится при входе, виден только участникам) ──
+    // ── NPC или маркер финиша (спаунится при входе, виден только участникам) ──
     @SerializedName("finish_npc") public FinishNpcConfig finishNpc;
+    @SerializedName("finish_marker") public FinishMarkerConfig finishMarker;
 
     // ── Управление временем ────────────────────────────────────────
     /** Установить время суток в данж-измерении при входе. null = не менять.
@@ -45,6 +46,12 @@ public class DungeonDefinition {
         public int width, height, length;
         public SizeVec() {}
         public SizeVec(int w, int h, int l) { this.width = w; this.height = h; this.length = l; }
+    }
+
+    public static class FinishMarkerConfig {
+        public String name = "Exit";
+        public IntVec3 offset = new IntVec3(25, 1, 65);
+        public java.util.List<String> actions = new java.util.ArrayList<>();
     }
 
     public static class FinishNpcConfig {

@@ -46,7 +46,18 @@
       "type": "dungeon",
       "description": "Найти и пройти Руины Теней, достать Книгу Теней",
       "dungeon_id": "shadow_ruins",
-      "next_stage": "return_to_trixie_1"
+      "next_stage": "return_to_trixie_1",
+      "proximity_trigger": {
+        "dimension": "minecraft:overworld",
+        "x": 0,
+        "y": 64,
+        "z": 0,
+        "radius": 5.0,
+        "spawn_marker": {
+          "name": "Войти в Руины Теней",
+          "actions": ["dungeon:enter:shadow_ruins"]
+        }
+      }
     },
     "return_to_trixie_1": {
       "type": "dialog",

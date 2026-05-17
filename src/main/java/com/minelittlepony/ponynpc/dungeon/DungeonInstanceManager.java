@@ -1,10 +1,12 @@
 package com.minelittlepony.ponynpc.dungeon;
 
+import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.party.Party;
 import com.minelittlepony.ponynpc.party.PartyManager;
 import com.minelittlepony.ponynpc.quest.GhostNpcSpawnConfig;
 import com.minelittlepony.ponynpc.quest.QuestManager;
+import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -136,8 +138,22 @@ public final class DungeonInstanceManager {
             player.sendMessage(Text.literal("[Dungeon] You entered: " + def.name), false);
         }
 
-        // Spawn finish NPC (visible to all participants, requires interaction)
-        if (def.finishNpc != null && !def.finishNpc.dialogId.isEmpty()) {
+        // Spawn finish marker (preferred) or finish NPC at dungeon end point
+        if (def.finishMarker != null) {
+            double mX = dstOrigin.getX() + def.finishMarker.offset.x + 0.5;
+            double mY = dstOrigin.getY() + def.finishMarker.offset.y;
+            double mZ = dstOrigin.getZ() + def.finishMarker.offset.z + 0.5;
+            QuestMarkerEntity marker = PonyNpcEntities.QUEST_MARKER.create(dungeonWorld);
+            if (marker != null) {
+                boolean first = true;
+                for (ServerPlayerEntity p : participants) {
+                    if (first) { marker.setup(def.finishMarker.name, def.finishMarker.actions, p.getUuid()); first = false; }
+                    else marker.addVisibleTo(p.getUuid());
+                }
+                marker.refreshPositionAndAngles(mX, mY, mZ, 0, 0);
+                dungeonWorld.spawnEntity(marker);
+            }
+        } else if (def.finishNpc != null && !def.finishNpc.dialogId.isEmpty()) {
             double npcX = dstOrigin.getX() + def.finishNpc.offset.x + 0.5;
             double npcY = dstOrigin.getY() + def.finishNpc.offset.y;
             double npcZ = dstOrigin.getZ() + def.finishNpc.offset.z + 0.5;
@@ -146,8 +162,8 @@ public final class DungeonInstanceManager {
             cfg.dialogId = def.finishNpc.dialogId;
             cfg.name = def.finishNpc.name;
             cfg.skin = def.finishNpc.skin;
-            cfg.autoDialog = false;        // игрок должен сам подойти и нажать
-            cfg.despawnAfterDialog = false; // живёт до конца данжа
+            cfg.autoDialog = false;
+            cfg.despawnAfterDialog = false;
 
             GhostNpcManager.getInstance().spawnGhostNpcAtPos(
                 participants, dungeonWorld, npcX, npcY, npcZ, cfg);

@@ -1,5 +1,8 @@
 package com.minelittlepony.ponynpc.command;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import com.minelittlepony.ponynpc.PonyNpcMod;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
 import com.minelittlepony.ponynpc.dungeon.DungeonInstanceManager;
@@ -9,11 +12,13 @@ import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.entity.SpawnReason;
@@ -28,6 +33,8 @@ import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.*;
+import java.nio.file.*;
 import java.util.*;
 
 import static net.minecraft.server.command.CommandManager.*;
@@ -54,6 +61,18 @@ public final class PonyNpcCommand {
         QuestManager.getInstance().getQuestIds().stream()
             .filter(id -> id.startsWith(builder.getRemaining()))
             .forEach(builder::suggest);
+        return builder.buildFuture();
+    };
+
+    private static final SuggestionProvider<ServerCommandSource> STAGE_SUGGESTIONS = (ctx, builder) -> {
+        try {
+            String questId = StringArgumentType.getString(ctx, "quest_id");
+            QuestManager.getInstance().getQuest(questId).ifPresent(def ->
+                def.stages.keySet().stream()
+                    .filter(id -> id.startsWith(builder.getRemaining()))
+                    .forEach(builder::suggest)
+            );
+        } catch (Exception ignored) {}
         return builder.buildFuture();
     };
 
@@ -153,6 +172,23 @@ public final class PonyNpcCommand {
                             .executes(ctx -> questAdvance(ctx,
                                 EntityArgumentType.getPlayer(ctx, "target"),
                                 StringArgumentType.getString(ctx, "quest_id")))))))
+
+            // ── Trigger position ──────────────────────────────────
+            .then(literal("trigger")
+                .then(literal("set")
+                    .then(argument("quest_id", StringArgumentType.word())
+                        .suggests(QUEST_SUGGESTIONS)
+                        .then(argument("stage_id", StringArgumentType.word())
+                            .suggests(STAGE_SUGGESTIONS)
+                            .executes(ctx -> triggerSet(ctx,
+                                StringArgumentType.getString(ctx, "quest_id"),
+                                StringArgumentType.getString(ctx, "stage_id"),
+                                -1))
+                            .then(argument("radius", DoubleArgumentType.doubleArg(0.5))
+                                .executes(ctx -> triggerSet(ctx,
+                                    StringArgumentType.getString(ctx, "quest_id"),
+                                    StringArgumentType.getString(ctx, "stage_id"),
+                                    DoubleArgumentType.getDouble(ctx, "radius"))))))))
 
             // ── Quest pocket ─────────────────────────────────────
             .then(literal("pocket")
@@ -403,5 +439,81 @@ public final class PonyNpcCommand {
         }
         ctx.getSource().sendError(Text.literal("[PonyNPC] Player doesn't have '" + itemId + "'"));
         return 0;
+    }
+
+    // ── Trigger position ──────────────────────────────────────────
+
+    /**
+     * Записывает текущую позицию игрока как центр proximity_trigger для указанного этапа.
+     * Читает и перезаписывает JSON в config/ponynpc/quests/<questId>.json.
+     * radius=-1 означает "не менять радиус".
+     */
+    private static int triggerSet(CommandContext<ServerCommandSource> ctx,
+                                   String questId, String stageId, double radius) {
+        try {
+            ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+
+            if (QuestManager.getInstance().getQuest(questId).isEmpty()) {
+                ctx.getSource().sendError(Text.literal("[PonyNPC] Quest not found: " + questId));
+                return 0;
+            }
+            if (QuestManager.getInstance().getQuest(questId).get().getStage(stageId).isEmpty()) {
+                ctx.getSource().sendError(Text.literal("[PonyNPC] Stage not found: " + stageId));
+                return 0;
+            }
+
+            Path questFile = FabricLoader.getInstance().getConfigDir()
+                .resolve("ponynpc").resolve("quests").resolve(questId + ".json");
+            if (!Files.exists(questFile)) {
+                ctx.getSource().sendError(Text.literal("[PonyNPC] Quest file not found: " + questFile));
+                return 0;
+            }
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            JsonObject root;
+            try (Reader reader = Files.newBufferedReader(questFile)) {
+                root = gson.fromJson(reader, JsonObject.class);
+            }
+
+            JsonObject stages = root.getAsJsonObject("stages");
+            if (stages == null || !stages.has(stageId)) {
+                ctx.getSource().sendError(Text.literal("[PonyNPC] Stage '" + stageId + "' not in JSON"));
+                return 0;
+            }
+
+            JsonObject stage = stages.getAsJsonObject(stageId);
+            JsonObject trigger = stage.has("proximity_trigger")
+                ? stage.getAsJsonObject("proximity_trigger")
+                : new JsonObject();
+
+            String dim = player.getServerWorld().getRegistryKey().getValue().toString();
+            double x = player.getX();
+            double y = player.getY();
+            double z = player.getZ();
+
+            trigger.addProperty("dimension", dim);
+            trigger.addProperty("x", Math.round(x * 10.0) / 10.0);
+            trigger.addProperty("y", Math.round(y * 10.0) / 10.0);
+            trigger.addProperty("z", Math.round(z * 10.0) / 10.0);
+            if (radius > 0) trigger.addProperty("radius", radius);
+
+            stage.add("proximity_trigger", trigger);
+            Files.writeString(questFile, gson.toJson(root));
+
+            QuestManager.getInstance().reload();
+
+            double fx = x, fy = y, fz = z;
+            ctx.getSource().sendFeedback(() -> Text.literal(
+                "[PonyNPC] Trigger set for " + questId + "/" + stageId
+                + " → " + dim + " (%.1f, %.1f, %.1f)".formatted(fx, fy, fz)
+                + (radius > 0 ? " r=" + radius : "")),
+                true);
+            return 1;
+
+        } catch (Exception e) {
+            ctx.getSource().sendError(Text.literal("[PonyNPC] Error: " + e.getMessage()));
+            LOGGER.error("triggerSet failed", e);
+            return 0;
+        }
     }
 }

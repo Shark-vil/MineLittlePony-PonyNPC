@@ -4,11 +4,10 @@
   "build_origin": null,
   "size": {"width": 50, "height": 20, "length": 70},
   "spawn_offset": {"x": 25, "y": 1, "z": 5},
-  "finish_npc": {
-    "dialog_id": "shadow_ruins_exit",
+  "finish_marker": {
     "name": "Алтарь Теней",
-    "skin": "twilight_sparkle",
-    "offset": {"x": 25, "y": 1, "z": 65}
+    "offset": {"x": 25, "y": 1, "z": 65},
+    "actions": ["dungeon:complete", "quest:shadow_book_ch1:complete_stage:enter_ruins"]
   },
   "fixed_time": 18000,
   "destructible": false,
