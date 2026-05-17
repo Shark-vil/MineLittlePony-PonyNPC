@@ -15,10 +15,6 @@ public final class ZoneBuilderSession {
     public BlockPos pos1;
     public BlockPos pos2;
     public RegistryKey<World> world;
-    public String targetBlock   = "";
-    public String condition     = "";
-    public String defaultDialog = "";
-    public String defaultName   = "???";
     public final List<MarkedBlock> blocks = new ArrayList<>();
 
     private ZoneBuilderSession() {}
@@ -32,10 +28,6 @@ public final class ZoneBuilderSession {
     }
 
     public boolean hasSelection() { return pos1 != null && pos2 != null; }
-
-    public boolean isReadyToSave() {
-        return hasSelection() && !targetBlock.isEmpty() && !defaultDialog.isEmpty();
-    }
 
     public BlockPos getMinCorner() {
         return new BlockPos(

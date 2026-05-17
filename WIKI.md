@@ -19,11 +19,12 @@
 9. [Как работает система диалогов](#как-работает-система-диалогов)
 10. [Дневник квестов](#дневник-квестов)
 11. [Quest Marker (интерактивный маркер)](#quest-marker)
-12. [Система данжей](#система-данжей)
-13. [Система пати](#система-пати)
-14. [Структура пакетов](#структура-пакетов)
-15. [Прогресс игрока](#прогресс-игрока)
-16. [Структура файлов проекта](#структура-файлов-проекта)
+12. [Block Interaction Zones (интерактивные блоки)](#block-interaction-zones)
+13. [Система данжей](#система-данжей)
+14. [Система пати](#система-пати)
+15. [Структура пакетов](#структура-пакетов)
+16. [Прогресс игрока](#прогресс-игрока)
+17. [Структура файлов проекта](#структура-файлов-проекта)
 
 **Расширенная документация (wiki/)**
 - [Квестовая система](wiki/QUEST_SYSTEM.md) — квесты, этапы, proximity trigger, квестовый карман
@@ -184,7 +185,7 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 | `/ponynpc spawn_marker <dialog_id> <item_id>` | Постоянный маркер с предметом |
 | `/ponynpc spawn_marker <dialog_id> <item_id> <name>` | С именем |
 | `/ponynpc remove` | Удаляет NPC/маркер, на который смотришь |
-| `/ponynpc reload` | Перезагружает диалоги, квесты, данжи |
+| `/ponynpc reload` | Перезагружает диалоги, квесты, данжи, block_zones |
 | `/ponynpc list` | Загруженные диалоги |
 | `/ponynpc quest list` | Загруженные квесты |
 | `/ponynpc quest start <id> [player]` | Начать квест |
@@ -212,6 +213,19 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 | `/dungeon save <id>` | Сохранить данж в конфиг |
 | `/dungeon info <id>` | Показать текущий конфиг данжа |
 | `/dungeon test <id>` | Запустить тестовый инстанс для себя |
+
+### `/zone` — создание block_zones (op level 2)
+
+| Команда | Описание |
+|---------|----------|
+| `/zone wand` | Выдать Zone Wand: ЛКМ по блоку = pos1, ПКМ = pos2 |
+| `/zone pos1` / `/zone pos2` | Установить угол по смотримому блоку (альтернатива жезлу) |
+| `/zone mark <dialog> [name]` | Отметить смотримый блок как особый (свой диалог) |
+| `/zone unmark` | Снять отметку со смотримого блока |
+| `/zone save <id> <block> <default_dialog> [condition]` | Сохранить зону и перезагрузить |
+| `/zone info` | Показать текущую сессию (pos1/pos2, отмеченные блоки) |
+| `/zone list` | Все загруженные зоны |
+| `/zone clear` | Сбросить сессию |
 
 ### `/party` — пати (доступна всем игрокам)
 
@@ -397,6 +411,108 @@ Server: валидация условий → executeAll(actions) → навиг
 
 ---
 
+## Block Interaction Zones
+
+Позволяет сделать обычные блоки мира (книжные полки, алтари, сундуки и т.п.) кликабельными в определённой зоне, только во время нужного этапа квеста. При ПКМ открывается диалог — без спауна сущностей.
+
+**Примеры применения:**
+- Библиотека: игрок ищет нужную книгу среди полок. Одна открывает квестовый диалог, остальные — рандомный текст.
+- Алтарь: один из камней в руинах активирует событие.
+- Доска объявлений: несколько записок с разными текстами.
+
+### Как создать зону
+
+```
+/zone wand
+```
+Выдаёт **Zone Wand** (палка с особым тегом):
+- **ЛКМ** по блоку → pos1 (один угол области)
+- **ПКМ** по блоку → pos2 (противоположный угол)
+
+```
+/zone mark <dialog_id>
+/zone mark <dialog_id> <имя>
+```
+Наведи прицел на **особый** блок (тот, что будет отличаться от остальных) и выполни команду. Повторяй для каждого особого блока.
+
+```
+/zone save <id> <тип_блока> <диалог_по_умолчанию> [условие]
+```
+Сохраняет зону. Параметры:
+| Параметр | Описание |
+|----------|----------|
+| `id` | Уникальное имя зоны (например `library_archive`) |
+| `тип_блока` | Какой блок реагирует (например `minecraft:bookshelf`) |
+| `диалог_по_умолчанию` | Диалог для обычных блоков зоны |
+| `условие` | *(опционально)* Квест-этап, при котором зона активна (например `quest:shadow_book_ch1:stage:find_book`) |
+
+### Пример: библиотека
+
+```
+/zone wand
+  ЛКМ по левому нижнему углу архива    → pos1
+  ПКМ по правому верхнему углу архива  → pos2
+
+(наводишь на нужную полку)
+/zone mark library_shadow_book_shelf Полка с загадочной книгой
+
+/zone save library_archive minecraft:bookshelf library_random_shelf quest:shadow_book_ch1:stage:find_book
+```
+
+Результат:
+- Все книжные полки в выбранной области → открывают `library_random_shelf`
+- Одна отмеченная полка → открывает `library_shadow_book_shelf`
+- Работает только у игроков на этапе `find_book`
+- Вне области — никакой реакции
+
+### Остальные команды `/zone`
+
+| Команда | Описание |
+|---------|----------|
+| `/zone wand` | Выдать Zone Wand |
+| `/zone pos1` / `/zone pos2` | Установить угол по смотримому блоку (альтернатива жезлу) |
+| `/zone mark <dialog> [name]` | Отметить смотримый блок как особый |
+| `/zone unmark` | Снять отметку со смотримого блока |
+| `/zone save <id> <block> <dialog> [cond]` | Сохранить зону и перезагрузить |
+| `/zone info` | Показать текущую сессию (pos1/pos2, отметки) |
+| `/zone list` | Все загруженные зоны |
+| `/zone clear` | Сбросить сессию |
+
+### JSON формат (для ручного редактирования)
+
+Файлы хранятся в `config/ponynpc/block_zones/<id>.json`.
+
+```json
+{
+  "id": "library_archive",
+  "condition": "quest:shadow_book_ch1:stage:find_book",
+  "world": "minecraft:overworld",
+  "min_x": 100, "min_y": 60, "min_z": 200,
+  "max_x": 120, "max_y": 75, "max_z": 220,
+  "target_block": "minecraft:bookshelf",
+  "default_dialog": "library_random_shelf",
+  "default_name": "Книжная полка",
+  "blocks": [
+    {
+      "x": 110, "y": 64, "z": 208,
+      "dialog": "library_shadow_book_shelf",
+      "name": "Полка с загадочной книгой"
+    }
+  ]
+}
+```
+
+| Поле | Описание |
+|------|----------|
+| `condition` | Условие активации (квест-условие, пустая строка = всегда). |
+| `world` | Измерение (пустая строка = любое). |
+| `target_block` | Тип блока, реагирующего на ПКМ. |
+| `default_dialog` | Диалог для всех блоков зоны, кроме перечисленных в `blocks`. |
+| `default_name` | Имя источника диалога по умолчанию. |
+| `blocks` | Список особых позиций с переопределёнными `dialog`/`name`. |
+
+---
+
 ## Система данжей
 
 ### Концепция
@@ -546,7 +662,8 @@ submod-ponynpc/
 │   │   └── lang/en_us.json
 │   └── data/ponynpc/
 │       ├── dialogs/      ← Встроенные примеры
-│       └── quests/       ← shadow_book_ch1.json
+│       ├── quests/       ← shadow_book_ch1.json
+│       └── block_zones/  ← Примеры зон интерактивных блоков
 │
 └── src/main/java/com/minelittlepony/ponynpc/
     ├── PonyNpcMod.java               Server entrypoint
@@ -555,6 +672,7 @@ submod-ponynpc/
     │   ├── PonyNpcEntity.java        Пони NPC (stationary, ghost NPC)
     │   ├── QuestMarkerEntity.java    Интерактивный маркер (куб/предмет)
     │   ├── IDialogEntity.java        Интерфейс для диалоговых сущностей
+    │   ├── VirtualDialogContext.java Виртуальный источник диалога (block_zones)
     │   └── PlayerVisibleEntity.java  Фильтрация видимости per-player
     ├── registry/
     │   ├── PonyNpcEntities.java
@@ -574,7 +692,10 @@ submod-ponynpc/
     │   ├── QuestConditionChecker.java
     │   ├── QuestActionExecutor.java
     │   ├── ProximityTriggerConfig.java
-    │   └── GhostNpcSpawnConfig.java
+    │   ├── GhostNpcSpawnConfig.java
+    │   ├── BlockZoneDefinition.java    Конфиг зоны интерактивных блоков
+    │   ├── BlockZoneRegistry.java      Загрузчик block_zones/*.json
+    │   └── BlockInteractionManager.java ПКМ-обработчик зон
     ├── state/
     │   ├── PlayerDialogState.java
     │   ├── QuestStateStore.java
@@ -598,7 +719,9 @@ submod-ponynpc/
     ├── command/
     │   ├── PonyNpcCommand.java
     │   ├── DungeonBuilderCommand.java
-    │   └── PartyCommand.java
+    │   ├── PartyCommand.java
+    │   ├── ZoneBuilderCommand.java     /zone — создание block_zones
+    │   └── ZoneBuilderSession.java     Временная сессия разметки
     └── client/
         ├── render/
         │   ├── PonyNpcRenderer.java

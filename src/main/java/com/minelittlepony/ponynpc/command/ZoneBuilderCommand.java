@@ -34,28 +34,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import static net.minecraft.server.command.CommandManager.*;
 
 /**
- * /zone — редактирование block_zones в игре (OP level 2).
+ * /zone — создание block_zones в игре (OP level 2).
  *
  * Workflow:
- *  1. /zone wand          — взять жезл (ЛКМ по блоку = pos1, ПКМ = pos2)
- *  2. /zone target <block> — тип блока (например minecraft:bookshelf)
- *  3. /zone condition <c>  — условие квеста (пустая строка = нет)
- *  4. /zone default <dialog> — диалог по умолчанию для не-особых блоков
- *  5. /zone default_name <name> — имя для не-особых блоков
- *  6. /zone mark <dialog>  — навести прицел на блок, задать ему особый диалог
- *  7. /zone save <id>       — сохранить зону в файл и перезагрузить
+ *  1. /zone wand
+ *       Выдаёт жезл. ЛКМ по блоку = pos1, ПКМ по блоку = pos2.
  *
- * Дополнительно:
- *  /zone pos1 / pos2       — установить угол по смотримому блоку (альтернатива жезлу)
- *  /zone unmark            — снять отметку со смотримого блока
- *  /zone info              — показать текущую сессию
- *  /zone list              — все загруженные зоны
- *  /zone clear             — сбросить сессию
+ *  2. (Опционально) Наводи прицел на особые блоки и выполняй:
+ *       /zone mark <dialog_id>          — этот блок откроет конкретный диалог
+ *       /zone mark <dialog_id> <name>   — то же, с именем в шапке
+ *
+ *  3. /zone save <id> <block_type> <default_dialog> [condition]
+ *       Сохраняет зону. Все блоки типа <block_type> в регионе откроют <default_dialog>,
+ *       кроме отмеченных через /zone mark.
+ *
+ * Остальные команды:
+ *  /zone pos1 / pos2   — альтернатива жезлу (по смотримому блоку)
+ *  /zone unmark        — снять отметку со смотримого блока
+ *  /zone info          — показать текущую сессию
+ *  /zone list          — все загруженные зоны
+ *  /zone clear         — сбросить сессию
  */
 public final class ZoneBuilderCommand {
 
@@ -112,22 +114,6 @@ public final class ZoneBuilderCommand {
                 .then(literal("pos2")
                     .executes(ZoneBuilderCommand::setPos2))
 
-                .then(literal("target")
-                    .then(argument("block_id", StringArgumentType.word())
-                        .executes(ctx -> setTarget(ctx, StringArgumentType.getString(ctx, "block_id")))))
-
-                .then(literal("condition")
-                    .then(argument("condition", StringArgumentType.greedyString())
-                        .executes(ctx -> setCondition(ctx, StringArgumentType.getString(ctx, "condition")))))
-
-                .then(literal("default")
-                    .then(argument("dialog_id", StringArgumentType.word())
-                        .executes(ctx -> setDefault(ctx, StringArgumentType.getString(ctx, "dialog_id")))))
-
-                .then(literal("default_name")
-                    .then(argument("name", StringArgumentType.greedyString())
-                        .executes(ctx -> setDefaultName(ctx, StringArgumentType.getString(ctx, "name")))))
-
                 .then(literal("mark")
                     .then(argument("dialog_id", StringArgumentType.word())
                         .executes(ctx -> markBlock(ctx, StringArgumentType.getString(ctx, "dialog_id"), ""))
@@ -139,9 +125,22 @@ public final class ZoneBuilderCommand {
                 .then(literal("unmark")
                     .executes(ZoneBuilderCommand::unmarkBlock))
 
+                // /zone save <id> <target_block> <default_dialog> [condition]
                 .then(literal("save")
                     .then(argument("id", StringArgumentType.word())
-                        .executes(ctx -> saveZone(ctx, StringArgumentType.getString(ctx, "id")))))
+                        .then(argument("target_block", StringArgumentType.word())
+                            .then(argument("default_dialog", StringArgumentType.word())
+                                .executes(ctx -> saveZone(ctx,
+                                    StringArgumentType.getString(ctx, "id"),
+                                    StringArgumentType.getString(ctx, "target_block"),
+                                    StringArgumentType.getString(ctx, "default_dialog"),
+                                    ""))
+                                .then(argument("condition", StringArgumentType.greedyString())
+                                    .executes(ctx -> saveZone(ctx,
+                                        StringArgumentType.getString(ctx, "id"),
+                                        StringArgumentType.getString(ctx, "target_block"),
+                                        StringArgumentType.getString(ctx, "default_dialog"),
+                                        StringArgumentType.getString(ctx, "condition"))))))))
 
                 .then(literal("info")
                     .executes(ZoneBuilderCommand::showInfo))
@@ -172,7 +171,7 @@ public final class ZoneBuilderCommand {
         return 1;
     }
 
-    // ── /zone pos1 / pos2 (raycast) ───────────────────────────────
+    // ── /zone pos1 / pos2 (альтернатива жезлу) ───────────────────
 
     private static int setPos1(CommandContext<ServerCommandSource> ctx) {
         ServerPlayerEntity player = getPlayer(ctx);
@@ -204,47 +203,6 @@ public final class ZoneBuilderCommand {
         return 1;
     }
 
-    // ── /zone target ──────────────────────────────────────────────
-
-    private static int setTarget(CommandContext<ServerCommandSource> ctx, String blockId) {
-        ServerPlayerEntity player = getPlayer(ctx);
-        if (player == null) return 0;
-        ZoneBuilderSession.get(player.getUuid()).targetBlock = blockId;
-        player.sendMessage(Text.literal("[Zone] target_block = " + blockId), false);
-        return 1;
-    }
-
-    // ── /zone condition ───────────────────────────────────────────
-
-    private static int setCondition(CommandContext<ServerCommandSource> ctx, String condition) {
-        ServerPlayerEntity player = getPlayer(ctx);
-        if (player == null) return 0;
-        String value = condition.equalsIgnoreCase("none") ? "" : condition;
-        ZoneBuilderSession.get(player.getUuid()).condition = value;
-        player.sendMessage(Text.literal("[Zone] condition = " + (value.isEmpty() ? "(нет)" : value)), false);
-        return 1;
-    }
-
-    // ── /zone default ─────────────────────────────────────────────
-
-    private static int setDefault(CommandContext<ServerCommandSource> ctx, String dialogId) {
-        ServerPlayerEntity player = getPlayer(ctx);
-        if (player == null) return 0;
-        ZoneBuilderSession.get(player.getUuid()).defaultDialog = dialogId;
-        player.sendMessage(Text.literal("[Zone] default_dialog = " + dialogId), false);
-        return 1;
-    }
-
-    // ── /zone default_name ────────────────────────────────────────
-
-    private static int setDefaultName(CommandContext<ServerCommandSource> ctx, String name) {
-        ServerPlayerEntity player = getPlayer(ctx);
-        if (player == null) return 0;
-        ZoneBuilderSession.get(player.getUuid()).defaultName = name;
-        player.sendMessage(Text.literal("[Zone] default_name = " + name), false);
-        return 1;
-    }
-
     // ── /zone mark ────────────────────────────────────────────────
 
     private static int markBlock(CommandContext<ServerCommandSource> ctx, String dialogId, String name) {
@@ -256,7 +214,7 @@ public final class ZoneBuilderCommand {
             return 0;
         }
         ZoneBuilderSession.get(player.getUuid()).markBlock(pos, dialogId, name);
-        player.sendMessage(Text.literal("[Zone] Отмечен блок " + formatPos(pos)
+        player.sendMessage(Text.literal("[Zone] Отмечен " + formatPos(pos)
             + " → " + dialogId + (name.isEmpty() ? "" : " [" + name + "]")), false);
         return 1;
     }
@@ -273,21 +231,23 @@ public final class ZoneBuilderCommand {
         }
         boolean removed = ZoneBuilderSession.get(player.getUuid()).unmarkBlock(pos);
         player.sendMessage(Text.literal(removed
-            ? "[Zone] Отметка снята с " + formatPos(pos)
+            ? "[Zone] Снята отметка с " + formatPos(pos)
             : "[Zone] Блок " + formatPos(pos) + " не был отмечен."), false);
         return removed ? 1 : 0;
     }
 
-    // ── /zone save <id> ───────────────────────────────────────────
+    // ── /zone save <id> <block_type> <default_dialog> [condition] ─
 
-    private static int saveZone(CommandContext<ServerCommandSource> ctx, String id) {
+    private static int saveZone(CommandContext<ServerCommandSource> ctx,
+                                 String id, String targetBlock,
+                                 String defaultDialog, String condition) {
         ServerPlayerEntity player = getPlayer(ctx);
         if (player == null) return 0;
 
         ZoneBuilderSession session = ZoneBuilderSession.get(player.getUuid());
-        if (!session.isReadyToSave()) {
+        if (!session.hasSelection()) {
             player.sendMessage(Text.literal(
-                "[Zone] Не хватает данных. Нужно: pos1, pos2, target, default_dialog."), false);
+                "[Zone] Сначала задай регион жезлом (ЛКМ = pos1, ПКМ = pos2)."), false);
             return 0;
         }
 
@@ -295,14 +255,14 @@ public final class ZoneBuilderCommand {
         BlockPos max = session.getMaxCorner();
 
         BlockZoneDefinition def = new BlockZoneDefinition();
-        def.id            = id;
-        def.condition     = session.condition;
-        def.world         = session.world != null ? session.world.getValue().toString() : "minecraft:overworld";
+        def.id             = id;
+        def.condition      = condition;
+        def.world          = session.world != null ? session.world.getValue().toString() : "minecraft:overworld";
         def.min_x = min.getX(); def.min_y = min.getY(); def.min_z = min.getZ();
         def.max_x = max.getX(); def.max_y = max.getY(); def.max_z = max.getZ();
-        def.target_block  = session.targetBlock;
-        def.default_dialog = session.defaultDialog;
-        def.default_name  = session.defaultName;
+        def.target_block   = targetBlock;
+        def.default_dialog = defaultDialog;
+        def.default_name   = "???";
 
         List<BlockZoneDefinition.BlockEntry> entries = new ArrayList<>();
         for (ZoneBuilderSession.MarkedBlock mb : session.blocks) {
@@ -327,8 +287,10 @@ public final class ZoneBuilderCommand {
         ZoneBuilderSession.clear(player.getUuid());
 
         player.sendMessage(Text.literal(
-            "[Zone] Сохранено '" + id + "': регион " + formatPos(min) + " → " + formatPos(max)
-            + ", блоков: " + entries.size() + " особых."), false);
+            "[Zone] Сохранено '" + id + "': "
+            + formatPos(min) + " → " + formatPos(max)
+            + " | блок: " + targetBlock
+            + " | особых: " + entries.size()), false);
         return 1;
     }
 
@@ -342,10 +304,6 @@ public final class ZoneBuilderCommand {
         StringBuilder sb = new StringBuilder("[Zone] Текущая сессия:\n");
         sb.append("  pos1: ").append(s.pos1 != null ? formatPos(s.pos1) : "не задано").append("\n");
         sb.append("  pos2: ").append(s.pos2 != null ? formatPos(s.pos2) : "не задано").append("\n");
-        sb.append("  target_block: ").append(s.targetBlock.isEmpty() ? "не задано" : s.targetBlock).append("\n");
-        sb.append("  condition: ").append(s.condition.isEmpty() ? "(нет)" : s.condition).append("\n");
-        sb.append("  default_dialog: ").append(s.defaultDialog.isEmpty() ? "не задано" : s.defaultDialog).append("\n");
-        sb.append("  default_name: ").append(s.defaultName).append("\n");
         if (s.blocks.isEmpty()) {
             sb.append("  особые блоки: нет");
         } else {
@@ -369,9 +327,9 @@ public final class ZoneBuilderCommand {
         StringBuilder sb = new StringBuilder("[Zone] Зоны (" + zones.size() + "):\n");
         for (var z : zones) {
             sb.append("  ").append(z.id)
-              .append(" [").append(z.target_block).append("]")
-              .append(" condition=").append(z.condition.isEmpty() ? "—" : z.condition)
-              .append(" blocks=").append(z.blocks != null ? z.blocks.size() : 0).append("\n");
+              .append(" | блок: ").append(z.target_block)
+              .append(" | condition: ").append(z.condition.isEmpty() ? "—" : z.condition)
+              .append(" | особых: ").append(z.blocks != null ? z.blocks.size() : 0).append("\n");
         }
         String msg = sb.toString();
         ctx.getSource().sendFeedback(() -> Text.literal(msg), false);
@@ -397,7 +355,6 @@ public final class ZoneBuilderCommand {
         return data.copyNbt().getBoolean(WAND_TAG);
     }
 
-    /** Возвращает координаты блока, на который смотрит игрок (до 10 блоков), или null. */
     private static BlockPos getLookedAtBlock(ServerPlayerEntity player) {
         HitResult hit = player.raycast(10.0, 0.0f, false);
         if (hit.getType() != HitResult.Type.BLOCK) return null;
