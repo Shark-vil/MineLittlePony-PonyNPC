@@ -41,6 +41,22 @@ public class DialogData {
     @SerializedName("sound_chars")
     public int soundChars = 2;
 
+    // ── ROUTER-режим ───────────────────────────────────────────────────────
+
+    /**
+     * Список записей маршрутизатора (режим ROUTER).
+     * Проверяются по порядку; выбирается первый, у которого выполнены все conditions.
+     * Запись без conditions — безусловный fallback.
+     */
+    public List<RouterEntry> entries = new ArrayList<>();
+
+    public static final class RouterEntry {
+        /** ID диалога, которому передаётся управление. */
+        public String dialog = "";
+        /** Список условий (все должны быть выполнены). Пустой — всегда выполнен (fallback). */
+        public List<String> conditions = List.of();
+    }
+
     // ── Вспомогательные методы ─────────────────────────────────────────────
 
     public Optional<DialogNode> getNode(String nodeId) {

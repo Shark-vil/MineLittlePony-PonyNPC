@@ -92,6 +92,7 @@ public class PonyNpcMod implements ModInitializer {
             PartyManager.getInstance().onPlayerDisconnect(uuid, server);
             DungeonInstanceManager.getInstance().onPlayerDisconnect(uuid);
             BlockInteractionManager.getInstance().clearForPlayer(uuid);
+            NetworkHandler.clearPlayerState(uuid);
         });
 
         // При смерти/возрождении вне dungeon-измерения — убираем из инстанса

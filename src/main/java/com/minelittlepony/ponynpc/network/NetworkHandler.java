@@ -21,12 +21,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class NetworkHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC/Network");
 
     public static final String RANDOM_NODE_ID = "__random__";
+
+    /** playerUuid → (entityUuid → resolvedDialogId) — переопределения диалога для router-режима. */
+    private static final Map<UUID, Map<UUID, String>> playerDialogOverrides = new ConcurrentHashMap<>();
 
     public static void registerServer() {
         PayloadTypeRegistry.playS2C().register(OpenDialogPayload.ID, OpenDialogPayload.CODEC);
@@ -127,6 +131,7 @@ public final class NetworkHandler {
         switch (dialog.mode) {
             case RANDOM -> openRandomDialog(player, entity, dialog);
             case QUEST  -> openQuestDialog(player, entity, dialog);
+            case ROUTER -> openRouterDialog(player, entity, dialog);
         }
     }
 
@@ -153,6 +158,41 @@ public final class NetworkHandler {
         }
         PlayerDialogState state = PlayerDialogState.getOrCreate(player.getServerWorld());
         sendQuestNode(player, entity, dialog, "start", startNodeOpt.get(), state);
+    }
+
+    // ── ROUTER ────────────────────────────────────────────────────
+
+    private static void openRouterDialog(ServerPlayerEntity player, IDialogEntity entity, DialogData routerDialog) {
+        for (DialogData.RouterEntry entry : routerDialog.entries) {
+            if (entry.dialog == null || entry.dialog.isEmpty()) continue;
+            if (!entry.conditions.isEmpty() && !QuestConditionChecker.checkAll(player, entry.conditions)) continue;
+
+            Optional<DialogData> targetOpt = DialogManager.getInstance().getDialog(entry.dialog);
+            if (targetOpt.isEmpty()) {
+                player.sendMessage(Text.literal("[PonyNPC] Router '" + routerDialog.id
+                    + "': target dialog not found: " + entry.dialog), false);
+                return;
+            }
+
+            DialogData target = targetOpt.get();
+            if (target.mode == DialogMode.ROUTER) {
+                LOGGER.warn("Router '{}' points to another router '{}' — nested routers are not supported",
+                    routerDialog.id, entry.dialog);
+                return;
+            }
+
+            playerDialogOverrides
+                .computeIfAbsent(player.getUuid(), k -> new ConcurrentHashMap<>())
+                .put(entity.getDialogSourceUuid(), entry.dialog);
+
+            switch (target.mode) {
+                case RANDOM -> openRandomDialog(player, entity, target);
+                case QUEST  -> openQuestDialog(player, entity, target);
+                default     -> {}
+            }
+            return;
+        }
+        // Ни одна запись не подошла — диалог не открывается
     }
 
     private static void sendQuestNode(ServerPlayerEntity player, IDialogEntity entity,
@@ -210,7 +250,7 @@ public final class NetworkHandler {
         IDialogEntity entity = findDialogEntity(player, payload.npcUuid());
         if (entity == null) return;
 
-        String dialogId = entity.getDialogId();
+        String dialogId = resolveDialogId(player, entity);
         Optional<DialogData> dialogOpt = DialogManager.getInstance().getDialog(dialogId);
         if (dialogOpt.isEmpty()) return;
 
@@ -270,6 +310,8 @@ public final class NetworkHandler {
 
     private static void handleClose(ServerPlayerEntity player, DialogChoicePayload payload) {
         IDialogEntity entity = findDialogEntity(player, payload.npcUuid());
+        if (entity == null) return;
+        clearDialogOverride(player, entity);
         if (entity instanceof PonyNpcEntity ponyNpc) {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
         } else if (entity instanceof VirtualDialogContext ctx) {
@@ -278,6 +320,7 @@ public final class NetworkHandler {
     }
 
     private static void closeDialogEntity(ServerPlayerEntity player, IDialogEntity entity) {
+        clearDialogOverride(player, entity);
         if (entity instanceof PonyNpcEntity ponyNpc) {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
         } else if (entity instanceof QuestMarkerEntity marker) {
@@ -288,6 +331,26 @@ public final class NetworkHandler {
     }
 
     // ── Утилиты ───────────────────────────────────────────────────
+
+    /** Возвращает overridden dialogId (router-режим) или entity.getDialogId(). */
+    private static String resolveDialogId(ServerPlayerEntity player, IDialogEntity entity) {
+        Map<UUID, String> overrides = playerDialogOverrides.get(player.getUuid());
+        if (overrides != null) {
+            String override = overrides.get(entity.getDialogSourceUuid());
+            if (override != null && !override.isEmpty()) return override;
+        }
+        return entity.getDialogId();
+    }
+
+    private static void clearDialogOverride(ServerPlayerEntity player, IDialogEntity entity) {
+        Map<UUID, String> overrides = playerDialogOverrides.get(player.getUuid());
+        if (overrides != null) overrides.remove(entity.getDialogSourceUuid());
+    }
+
+    /** Вызывается при отключении игрока. */
+    public static void clearPlayerState(UUID playerUuid) {
+        playerDialogOverrides.remove(playerUuid);
+    }
 
     private static IDialogEntity findDialogEntity(ServerPlayerEntity player, UUID uuid) {
         if (player.getWorld() instanceof ServerWorld serverWorld) {

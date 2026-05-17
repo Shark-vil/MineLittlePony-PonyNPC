@@ -22,7 +22,15 @@ public enum DialogMode {
      * Использует поля {@code phrases}, {@code sound}, {@code sound_chars} в JSON.
      */
     @SerializedName(value = "random", alternate = "RANDOM")
-    RANDOM
+    RANDOM,
+
+    /**
+     * Маршрутизатор: выбирает первый диалог, у которого выполнены все conditions.
+     * Позволяет переиспользовать одного NPC для разных квестовых состояний.
+     * Использует поле {@code entries} в JSON.
+     */
+    @SerializedName(value = "router", alternate = "ROUTER")
+    ROUTER
 
     // ── Зарезервировано для будущих режимов ───────────────────────────────
     // SCRIPTED  — детерминированная последовательность узлов без выборов

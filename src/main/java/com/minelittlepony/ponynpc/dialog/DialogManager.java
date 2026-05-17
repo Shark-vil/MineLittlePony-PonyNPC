@@ -104,6 +104,13 @@ public final class DialogManager {
                 }
                 yield true;
             }
+            case ROUTER -> {
+                if (data.entries == null || data.entries.isEmpty()) {
+                    LOGGER.warn("Dialog '{}' (mode=router) has no entries — skipping", data.id);
+                    yield false;
+                }
+                yield true;
+            }
         };
     }
 
