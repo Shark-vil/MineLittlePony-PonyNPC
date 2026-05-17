@@ -61,7 +61,8 @@
           "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
           "hidden_if_condition_fails": true,
           "actions": [
-            "quest:shadow_book_ch1:complete_stage"
+            "quest:shadow_book_ch1:complete_stage",
+            "ghost_npc:despawn"
           ]
         },
         {

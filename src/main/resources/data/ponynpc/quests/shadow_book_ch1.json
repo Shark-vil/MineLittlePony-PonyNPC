@@ -18,7 +18,7 @@
           "skin": "trixie",
           "name": "Великая и Могучая Трикси",
           "auto_dialog": true,
-          "despawn_after_dialog": true
+          "despawn_after_dialog": false
         }
       }
     },

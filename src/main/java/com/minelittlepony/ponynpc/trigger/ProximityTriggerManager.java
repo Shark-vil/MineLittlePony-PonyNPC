@@ -1,5 +1,6 @@
 package com.minelittlepony.ponynpc.trigger;
 
+import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
 import com.minelittlepony.ponynpc.state.PlayerQuestState;
@@ -18,18 +19,23 @@ import java.util.*;
 
 /**
  * Проверяет proximity-триггеры квестов каждые 20 тиков.
- * Триггеры встроены в QuestStage.proximityTrigger и срабатывают
- * когда игрок входит в радиус (при условии нужного этапа квеста).
+ *
+ * Логика повторного срабатывания:
+ * - Триггер не срабатывает повторно пока spawned ghost NPC жив.
+ * - Когда игрок покидает радиус, а ghost NPC уже нет → триггер сбрасывается.
+ * - Следующий вход в радиус снова spawns NPC.
  */
 public final class ProximityTriggerManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC/ProximityTrigger");
-    private static final int CHECK_INTERVAL = 20; // тики (1 сек)
+    private static final int CHECK_INTERVAL = 20;
     private static final ProximityTriggerManager INSTANCE = new ProximityTriggerManager();
 
-    // Запоминаем для каждого игрока какие триггеры уже сработали (до выхода со стадии)
-    // key: playerUuid + ":" + questId + ":" + stageId
-    private final Set<String> firedTriggers = new HashSet<>();
+    // fireKey = playerUuid:questId:stageId
+    private final Set<String> firedTriggers   = new HashSet<>();
+    private final Set<String> playersInRange  = new HashSet<>();
+    // NPC spawned by a trigger (null if trigger had no ghost_npc)
+    private final Map<String, PonyNpcEntity>  triggerNpcs = new HashMap<>();
 
     private int tickCounter = 0;
 
@@ -37,7 +43,6 @@ public final class ProximityTriggerManager {
 
     public static ProximityTriggerManager getInstance() { return INSTANCE; }
 
-    /** Вызывается каждый тик сервера. */
     public void tick(MinecraftServer server) {
         if (++tickCounter < CHECK_INTERVAL) return;
         tickCounter = 0;
@@ -59,21 +64,44 @@ public final class ProximityTriggerManager {
                     if (trigger == null) return;
 
                     String fireKey = playerUuid + ":" + questId + ":" + stageId;
-                    if (firedTriggers.contains(fireKey)) return;
+                    boolean inRange = isPlayerInRange(player, server, trigger);
 
-                    if (isPlayerInRange(player, server, trigger)) {
+                    if (inRange) {
+                        playersInRange.add(fireKey);
+
+                        if (firedTriggers.contains(fireKey)) {
+                            // Already fired — re-fire only if the spawned NPC is gone
+                            PonyNpcEntity npc = triggerNpcs.get(fireKey);
+                            if (npc != null && !npc.isRemoved()) return; // NPC still alive
+                            // NPC gone but player still in range → respawn immediately
+                            firedTriggers.remove(fireKey);
+                            triggerNpcs.remove(fireKey);
+                        }
+
                         firedTriggers.add(fireKey);
-                        fireTrigger(player, server, questId, stageId, trigger);
+                        PonyNpcEntity spawned = fireTrigger(player, server, questId, stageId, trigger);
+                        triggerNpcs.put(fireKey, spawned); // may be null if no ghost_npc configured
+
+                    } else {
+                        // Player left the radius
+                        if (playersInRange.remove(fireKey)) {
+                            // They were in range — reset if the NPC is gone
+                            PonyNpcEntity npc = triggerNpcs.get(fireKey);
+                            if (npc == null || npc.isRemoved()) {
+                                firedTriggers.remove(fireKey);
+                                triggerNpcs.remove(fireKey);
+                            }
+                        }
                     }
                 });
             }
         }
 
-        // Очищаем сработавшие триггеры для игроков которые сменили стадию
         cleanupFiredTriggers(server, store);
     }
 
-    private boolean isPlayerInRange(ServerPlayerEntity player, MinecraftServer server, ProximityTriggerConfig trigger) {
+    private boolean isPlayerInRange(ServerPlayerEntity player, MinecraftServer server,
+                                    ProximityTriggerConfig trigger) {
         Identifier dimId = Identifier.tryParse(trigger.dimension);
         if (dimId == null) return false;
         RegistryKey<World> dimKey = RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, dimId);
@@ -88,19 +116,21 @@ public final class ProximityTriggerManager {
         return (dx * dx + dy * dy + dz * dz) <= trigger.radius * trigger.radius;
     }
 
-    private void fireTrigger(ServerPlayerEntity player, MinecraftServer server, String questId,
-                              String stageId, ProximityTriggerConfig trigger) {
+    /** Fires the trigger and returns the ghost NPC that was spawned (or null). */
+    private PonyNpcEntity fireTrigger(ServerPlayerEntity player, MinecraftServer server,
+                                      String questId, String stageId,
+                                      ProximityTriggerConfig trigger) {
         LOGGER.info("Proximity trigger fired: quest='{}' stage='{}' player='{}'",
             questId, stageId, player.getName().getString());
 
-        // Spawn ghost NPC если настроен
+        PonyNpcEntity spawned = null;
         if (trigger.spawnGhostNpc != null) {
             ServerWorld world = player.getServerWorld();
-            GhostNpcManager.getInstance().spawnGhostNpc(player, world, trigger.spawnGhostNpc);
+            spawned = GhostNpcManager.getInstance().spawnGhostNpc(player, world, trigger.spawnGhostNpc);
         }
 
-        // Дополнительные действия
         QuestActionExecutor.executeAll(player, null, trigger.actions);
+        return spawned;
     }
 
     private void cleanupFiredTriggers(MinecraftServer server, QuestStateStore store) {
@@ -109,18 +139,24 @@ public final class ProximityTriggerManager {
             if (parts.length < 3) return true;
             try {
                 UUID playerUuid = UUID.fromString(parts[0]);
-                String questId = parts[1];
-                String stageId = parts[2];
-                // Триггер больше не нужен если игрок сменил стадию
-                return !store.isOnStage(playerUuid, questId, stageId);
+                String questId  = parts[1];
+                String stageId  = parts[2];
+                boolean expired = !store.isOnStage(playerUuid, questId, stageId);
+                if (expired) {
+                    triggerNpcs.remove(key);
+                    playersInRange.remove(key);
+                }
+                return expired;
             } catch (IllegalArgumentException e) {
                 return true;
             }
         });
     }
 
-    /** Сбросить все сработавшие триггеры для игрока (при logout). */
     public void clearForPlayer(UUID playerUuid) {
-        firedTriggers.removeIf(key -> key.startsWith(playerUuid.toString() + ":"));
+        String prefix = playerUuid + ":";
+        firedTriggers.removeIf(k  -> k.startsWith(prefix));
+        triggerNpcs.keySet().removeIf(k -> k.startsWith(prefix));
+        playersInRange.removeIf(k  -> k.startsWith(prefix));
     }
 }
