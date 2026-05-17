@@ -6,6 +6,8 @@ import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.state.PlayerDialogState;
+import com.minelittlepony.ponynpc.state.PlayerQuestState;
+import com.minelittlepony.ponynpc.state.QuestStateStore;
 
 import net.fabricmc.fabric.api.networking.v1.*;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -27,11 +29,79 @@ public final class NetworkHandler {
     public static void registerServer() {
         PayloadTypeRegistry.playS2C().register(OpenDialogPayload.ID, OpenDialogPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(CloseDialogPayload.ID, CloseDialogPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(QuestJournalPayload.ID, QuestJournalPayload.CODEC);
         PayloadTypeRegistry.playC2S().register(DialogChoicePayload.ID, DialogChoicePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(RequestQuestJournalPayload.ID, RequestQuestJournalPayload.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(DialogChoicePayload.ID, (payload, context) -> {
             context.server().execute(() -> handleChoice(payload, context.player()));
         });
+        ServerPlayNetworking.registerGlobalReceiver(RequestQuestJournalPayload.ID, (payload, context) -> {
+            context.server().execute(() -> {
+                QuestJournalPayload journal = buildJournal(context.player());
+                ServerPlayNetworking.send(context.player(), journal);
+            });
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ДНЕВНИК КВЕСТОВ
+    // ══════════════════════════════════════════════════════════════
+
+    private static QuestJournalPayload buildJournal(ServerPlayerEntity player) {
+        UUID uuid   = player.getUuid();
+        QuestStateStore store = QuestStateStore.getOrCreate(player.getServer());
+        QuestManager qm       = QuestManager.getInstance();
+
+        List<QuestJournalPayload.QuestEntry> result = new ArrayList<>();
+
+        for (String questId : qm.getQuestIds()) {
+            if (!store.isStarted(uuid, questId)) continue;
+
+            Optional<QuestDefinition> defOpt = qm.getQuest(questId);
+            if (defOpt.isEmpty()) continue;
+            QuestDefinition def = defOpt.get();
+
+            Optional<PlayerQuestState> stateOpt = store.getState(uuid, questId);
+            if (stateOpt.isEmpty()) continue;
+            PlayerQuestState state = stateOpt.get();
+
+            boolean complete = state.isComplete();
+
+            // Обходим цепочку этапов от startStage по nextStage
+            List<QuestJournalPayload.StageEntry> stages = new ArrayList<>();
+            Set<String> visited = new HashSet<>();
+            String stageId = def.startStage;
+            while (stageId != null && !visited.contains(stageId)) {
+                visited.add(stageId);
+                QuestStage stage = def.stages.get(stageId);
+                if (stage == null) break;
+
+                int status;
+                if (complete || state.isStageComplete(stageId)) {
+                    status = 2;
+                } else if (state.isOnStage(stageId)) {
+                    status = 1;
+                } else {
+                    status = 0;
+                }
+
+                int collected = 0, required = 0;
+                if (stage.type == QuestStageType.MULTI_COLLECT) {
+                    collected = store.getCollectedCount(uuid, questId, stageId);
+                    required  = stage.getEffectiveRequiredCount();
+                }
+
+                stages.add(new QuestJournalPayload.StageEntry(
+                    stage.description, status, collected, required));
+                stageId = stage.nextStage;
+            }
+
+            String displayName = (def.name == null || def.name.isEmpty()) ? questId : def.name;
+            result.add(new QuestJournalPayload.QuestEntry(displayName, complete, stages));
+        }
+
+        return new QuestJournalPayload(result);
     }
 
     // ══════════════════════════════════════════════════════════════
