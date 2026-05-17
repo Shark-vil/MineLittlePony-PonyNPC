@@ -1,0 +1,62 @@
+{
+  "id": "example",
+  "nodes": {
+    "start": {
+      "text": "Hello, traveler! It's wonderful to see you in Ponyville. Is there anything I can help you with?",
+      "sound": "ponynpc:talk",
+      "sound_chars": 2,
+      "choices": [
+        {
+          "id": "ask_about_town",
+          "text": "Tell me about Ponyville.",
+          "next": "about_town",
+          "once": false
+        },
+        {
+          "id": "ask_once",
+          "text": "Do you have any rare information? (once)",
+          "next": "rare_info",
+          "once": true
+        },
+        {
+          "id": "goodbye",
+          "text": "Goodbye!",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "about_town": {
+      "text": "Ponyville is the most wonderful town in all of Equestria! Founded by Earth Ponies, it has grown into a place where all kinds of ponies live together in harmony.",
+      "sound": "ponynpc:talk",
+      "sound_chars": 2,
+      "choices": [
+        {
+          "id": "back_from_town",
+          "text": "Fascinating! Tell me more.",
+          "next": "start",
+          "once": false
+        },
+        {
+          "id": "bye_from_town",
+          "text": "Thank you! Goodbye.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "rare_info": {
+      "text": "Ah, since you're asking... there are rumors of a hidden gem in the Everfree Forest. But be careful — nopony who went looking ever came back the same.",
+      "sound": "ponynpc:talk_magic",
+      "sound_chars": 3,
+      "choices": [
+        {
+          "id": "rare_back",
+          "text": "I'll keep that in mind. Thanks!",
+          "next": "start",
+          "once": false
+        }
+      ]
+    }
+  }
+}
