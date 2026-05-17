@@ -186,12 +186,18 @@ public final class DungeonBuilderCommand {
         def.spawnOffset = new DungeonDefinition.IntVec3(
             sp.getX() - min.getX(), sp.getY() - min.getY(), sp.getZ() - min.getZ());
 
-        // Finish NPC offset (optional)
+        // Finish position offset (optional) — update marker OR npc, whichever is configured
         if (session.finish != null) {
             BlockPos fn = session.finish;
-            if (def.finishNpc == null) def.finishNpc = new DungeonDefinition.FinishNpcConfig();
-            def.finishNpc.offset = new DungeonDefinition.IntVec3(
-                fn.getX() - min.getX(), fn.getY() - min.getY(), fn.getZ() - min.getZ());
+            int ox = fn.getX() - min.getX();
+            int oy = fn.getY() - min.getY();
+            int oz = fn.getZ() - min.getZ();
+            if (def.finishMarker != null) {
+                def.finishMarker.offset = new DungeonDefinition.IntVec3(ox, oy, oz);
+            } else {
+                if (def.finishNpc == null) def.finishNpc = new DungeonDefinition.FinishNpcConfig();
+                def.finishNpc.offset = new DungeonDefinition.IntVec3(ox, oy, oz);
+            }
         }
 
         // Persist to disk
