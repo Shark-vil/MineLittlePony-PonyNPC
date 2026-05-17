@@ -1,6 +1,7 @@
 package com.minelittlepony.ponynpc;
 
 import com.minelittlepony.ponynpc.client.render.PonyNpcRenderer;
+import com.minelittlepony.ponynpc.client.render.QuestMarkerRenderer;
 import com.minelittlepony.ponynpc.client.screen.DialogScreen;
 import com.minelittlepony.ponynpc.client.screen.QuestJournalScreen;
 import com.minelittlepony.ponynpc.network.QuestJournalPayload;
@@ -33,6 +34,7 @@ public class PonyNpcClient implements ClientModInitializer {
     public void onInitializeClient() {
         LOGGER.info("[PonyNPC] Client initialized");
         EntityRendererRegistry.register(PonyNpcEntities.PONY_NPC, PonyNpcRenderer::new);
+        EntityRendererRegistry.register(PonyNpcEntities.QUEST_MARKER, QuestMarkerRenderer::new);
 
         // Сетевые пакеты диалога
         ClientPlayNetworking.registerGlobalReceiver(

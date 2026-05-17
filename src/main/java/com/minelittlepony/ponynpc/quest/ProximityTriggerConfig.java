@@ -11,10 +11,13 @@ public class ProximityTriggerConfig {
     public double radius = 10.0;
     /** Если задан — при срабатывании спаунит ghost NPC для игрока. */
     @SerializedName("spawn_ghost_npc") public GhostNpcSpawnConfig spawnGhostNpc = null;
+    /** Если true — триггер сразу выполняет actions без спауна сущности. */
+    @SerializedName("auto_complete") public boolean autoComplete = false;
+    /** Если задан — спаунит кликабельный маркер-объект вместо пони-NPC. */
+    @SerializedName("spawn_marker") public MarkerSpawnConfig spawnMarker = null;
     /**
-     * Дополнительные quest-действия при срабатывании.
+     * Действия при срабатывании (для ghost_npc и auto_complete режимов).
      * Формат — те же строки что и в DialogChoice.actions.
-     * Пример: "quest:my_quest:complete_stage"
      */
     public java.util.List<String> actions = new java.util.ArrayList<>();
 }

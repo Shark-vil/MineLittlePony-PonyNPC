@@ -1,6 +1,7 @@
 package com.minelittlepony.ponynpc.registry;
 
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
+import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
 
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.entity.EntityType;
@@ -18,6 +19,17 @@ public final class PonyNpcEntities {
             .dimensions(0.6F, 1.95F)
             .maxTrackingRange(10)
             .trackingTickInterval(3)
+            .build()
+    );
+
+    public static final EntityType<QuestMarkerEntity> QUEST_MARKER = Registry.register(
+        Registries.ENTITY_TYPE,
+        Identifier.of("ponynpc", "quest_marker"),
+        EntityType.Builder.<QuestMarkerEntity>create(QuestMarkerEntity::new, SpawnGroup.MISC)
+            .dimensions(0.5F, 0.5F)
+            .maxTrackingRange(10)
+            .trackingTickInterval(4)
+            .disableSummon()
             .build()
     );
 

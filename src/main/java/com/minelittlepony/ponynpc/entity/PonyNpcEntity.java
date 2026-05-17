@@ -19,7 +19,7 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 
-public class PonyNpcEntity extends PathAwareEntity {
+public class PonyNpcEntity extends PathAwareEntity implements PlayerVisibleEntity {
 
     private static final String SKINS_PREFIX = "ponynpc:textures/skins/";
     private static final double MAX_INTERACT_DIST_SQ = 16.0; // 4 blocks max

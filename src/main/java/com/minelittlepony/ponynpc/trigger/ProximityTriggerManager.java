@@ -1,10 +1,13 @@
 package com.minelittlepony.ponynpc.trigger;
 
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
+import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
+import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.state.PlayerQuestState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
+import net.minecraft.entity.Entity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -20,10 +23,15 @@ import java.util.*;
 /**
  * Проверяет proximity-триггеры квестов каждые 20 тиков.
  *
+ * Три режима триггера:
+ * - ghost_npc: спаунит пони-NPC для игрока (спавн + действия выполняются немедленно)
+ * - spawn_marker: спаунит кликабельный QuestMarkerEntity (действия при клике)
+ * - auto_complete: выполняет actions немедленно без сущности
+ *
  * Логика повторного срабатывания:
- * - Триггер не срабатывает повторно пока spawned ghost NPC жив.
- * - Когда игрок покидает радиус, а ghost NPC уже нет → триггер сбрасывается.
- * - Следующий вход в радиус снова spawns NPC.
+ * - Триггер не срабатывает повторно пока spawned entity жив.
+ * - Когда игрок покидает радиус, а entity уже нет → триггер сбрасывается.
+ * - Следующий вход в радиус снова спаунит entity / выполняет actions.
  */
 public final class ProximityTriggerManager {
 
@@ -32,10 +40,10 @@ public final class ProximityTriggerManager {
     private static final ProximityTriggerManager INSTANCE = new ProximityTriggerManager();
 
     // fireKey = playerUuid:questId:stageId
-    private final Set<String> firedTriggers   = new HashSet<>();
-    private final Set<String> playersInRange  = new HashSet<>();
-    // NPC spawned by a trigger (null if trigger had no ghost_npc)
-    private final Map<String, PonyNpcEntity>  triggerNpcs = new HashMap<>();
+    private final Set<String>          firedTriggers   = new HashSet<>();
+    private final Set<String>          playersInRange  = new HashSet<>();
+    // Entity spawned by a trigger (null if auto_complete or no entity configured)
+    private final Map<String, Entity>  triggerEntities = new HashMap<>();
 
     private int tickCounter = 0;
 
@@ -70,27 +78,27 @@ public final class ProximityTriggerManager {
                         playersInRange.add(fireKey);
 
                         if (firedTriggers.contains(fireKey)) {
-                            // Already fired — re-fire only if the spawned NPC is gone
-                            PonyNpcEntity npc = triggerNpcs.get(fireKey);
-                            if (npc != null && !npc.isRemoved()) return; // NPC still alive
-                            // NPC gone but player still in range → respawn immediately
+                            // Already fired — re-fire only if the spawned entity is gone
+                            Entity entity = triggerEntities.get(fireKey);
+                            if (entity != null && !entity.isRemoved()) return; // Entity still alive
+                            // Entity gone but player still in range → respawn
                             firedTriggers.remove(fireKey);
-                            triggerNpcs.remove(fireKey);
+                            triggerEntities.remove(fireKey);
                         }
 
                         firedTriggers.add(fireKey);
-                        PonyNpcEntity spawned = fireTrigger(player, server, questId, stageId, trigger);
-                        triggerNpcs.put(fireKey, spawned); // may be null if no ghost_npc configured
+                        Entity spawned = fireTrigger(player, server, questId, stageId, trigger);
+                        triggerEntities.put(fireKey, spawned); // null for auto_complete
 
                     } else {
                         // Player left the radius
                         if (playersInRange.remove(fireKey)) {
-                            // They were in range — reset if the NPC is gone
-                            PonyNpcEntity npc = triggerNpcs.get(fireKey);
-                            if (npc == null || npc.isRemoved()) {
+                            Entity entity = triggerEntities.get(fireKey);
+                            if (entity == null || entity.isRemoved()) {
                                 firedTriggers.remove(fireKey);
-                                triggerNpcs.remove(fireKey);
+                                triggerEntities.remove(fireKey);
                             }
+                            // Ghost NPCs stay alive past radius edge; markers and auto reset immediately
                         }
                     }
                 });
@@ -116,19 +124,43 @@ public final class ProximityTriggerManager {
         return (dx * dx + dy * dy + dz * dz) <= trigger.radius * trigger.radius;
     }
 
-    /** Fires the trigger and returns the ghost NPC that was spawned (or null). */
-    private PonyNpcEntity fireTrigger(ServerPlayerEntity player, MinecraftServer server,
-                                      String questId, String stageId,
-                                      ProximityTriggerConfig trigger) {
-        LOGGER.info("Proximity trigger fired: quest='{}' stage='{}' player='{}'",
-            questId, stageId, player.getName().getString());
+    /**
+     * Fires the trigger according to its mode and returns the spawned entity (or null).
+     * Modes:
+     *   auto_complete  → execute actions immediately, return null
+     *   spawn_marker   → spawn QuestMarkerEntity, return it
+     *   ghost_npc      → spawn ghost NPC + execute trigger.actions, return NPC
+     */
+    private Entity fireTrigger(ServerPlayerEntity player, MinecraftServer server,
+                               String questId, String stageId,
+                               ProximityTriggerConfig trigger) {
+        LOGGER.info("Proximity trigger fired: quest='{}' stage='{}' player='{}' mode='{}'",
+            questId, stageId, player.getName().getString(),
+            trigger.autoComplete ? "auto_complete" : trigger.spawnMarker != null ? "spawn_marker" : "ghost_npc");
 
-        PonyNpcEntity spawned = null;
-        if (trigger.spawnGhostNpc != null) {
-            ServerWorld world = player.getServerWorld();
-            spawned = GhostNpcManager.getInstance().spawnGhostNpc(player, world, trigger.spawnGhostNpc);
+        if (trigger.autoComplete) {
+            QuestActionExecutor.executeAll(player, null, trigger.actions);
+            return null;
         }
 
+        if (trigger.spawnMarker != null) {
+            ServerWorld world = player.getServerWorld();
+            QuestMarkerEntity marker = PonyNpcEntities.QUEST_MARKER.create(world);
+            if (marker != null) {
+                marker.setup(trigger.spawnMarker.name, trigger.spawnMarker.actions, player.getUuid());
+                marker.refreshPositionAndAngles(trigger.x, trigger.y, trigger.z, 0, 0);
+                world.spawnEntity(marker);
+                return marker;
+            }
+            return null;
+        }
+
+        // Ghost NPC mode
+        ServerWorld world = player.getServerWorld();
+        PonyNpcEntity spawned = null;
+        if (trigger.spawnGhostNpc != null) {
+            spawned = GhostNpcManager.getInstance().spawnGhostNpc(player, world, trigger.spawnGhostNpc);
+        }
         QuestActionExecutor.executeAll(player, null, trigger.actions);
         return spawned;
     }
@@ -143,7 +175,8 @@ public final class ProximityTriggerManager {
                 String stageId  = parts[2];
                 boolean expired = !store.isOnStage(playerUuid, questId, stageId);
                 if (expired) {
-                    triggerNpcs.remove(key);
+                    Entity entity = triggerEntities.remove(key);
+                    if (entity != null && !entity.isRemoved()) entity.discard();
                     playersInRange.remove(key);
                 }
                 return expired;
@@ -155,8 +188,15 @@ public final class ProximityTriggerManager {
 
     public void clearForPlayer(UUID playerUuid) {
         String prefix = playerUuid + ":";
-        firedTriggers.removeIf(k  -> k.startsWith(prefix));
-        triggerNpcs.keySet().removeIf(k -> k.startsWith(prefix));
-        playersInRange.removeIf(k  -> k.startsWith(prefix));
+        List<String> toRemove = new ArrayList<>();
+        for (String k : firedTriggers) {
+            if (k.startsWith(prefix)) toRemove.add(k);
+        }
+        for (String k : toRemove) {
+            firedTriggers.remove(k);
+            Entity entity = triggerEntities.remove(k);
+            if (entity != null && !entity.isRemoved()) entity.discard();
+            playersInRange.remove(k);
+        }
     }
 }
