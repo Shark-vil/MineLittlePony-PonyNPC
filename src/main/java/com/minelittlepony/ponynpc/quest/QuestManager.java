@@ -216,6 +216,24 @@ public final class QuestManager {
         return true;
     }
 
+    /**
+     * Завершает все активные DUNGEON-этапы игрока, связанные с данным dungeonId.
+     * Вызывается из DungeonInstanceManager.completeDungeon().
+     */
+    public void completeDungeonStages(ServerPlayerEntity player, String dungeonId) {
+        QuestStateStore store = QuestStateStore.getOrCreate(player.getServer());
+        for (Map.Entry<String, QuestDefinition> entry : quests.entrySet()) {
+            String questId = entry.getKey();
+            store.getCurrentStage(player.getUuid(), questId).ifPresent(stageId ->
+                entry.getValue().getStage(stageId).ifPresent(stage -> {
+                    if (stage.type == QuestStageType.DUNGEON && dungeonId.equals(stage.dungeonId)) {
+                        completeCurrentStage(player, questId);
+                    }
+                })
+            );
+        }
+    }
+
     // ── Тик для WAIT_DAYS ─────────────────────────────────────────
 
     /** Проверяет и завершает WAIT_DAYS этапы для всех онлайн игроков. */

@@ -4,6 +4,7 @@ import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.party.Party;
 import com.minelittlepony.ponynpc.party.PartyManager;
 import com.minelittlepony.ponynpc.quest.GhostNpcSpawnConfig;
+import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.state.QuestPocketState;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -193,6 +194,7 @@ public final class DungeonInstanceManager {
             ServerPlayerEntity member = server.getPlayerManager().getPlayer(memberId);
             if (member != null) {
                 if (def != null) giveRewards(member, def);
+                QuestManager.getInstance().completeDungeonStages(member, inst.dungeonId);
                 GhostNpcManager.getInstance().despawnAll(memberId);
                 teleportBack(member, inst, server);
                 member.sendMessage(Text.literal("[Dungeon] Dungeon completed! Rewards given."), false);
