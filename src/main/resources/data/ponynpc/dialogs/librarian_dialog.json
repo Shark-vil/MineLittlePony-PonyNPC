@@ -1,0 +1,73 @@
+{
+  "id": "librarian_dialog",
+  "nodes": {
+    "start": {
+      "text": "Добро пожаловать в библиотеку Понивилля. Чем я могу помочь?",
+      "sound": "ponynpc:talk",
+      "sound_chars": 2,
+      "choices": [
+        {
+          "id": "ask_shadow_book",
+          "text": "Я ищу «Книгу Теней».",
+          "next": "need_card",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_librarian"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "give_card",
+          "text": "Вот мой читательский билет. Я хочу пройти в архив.",
+          "next": "access_granted",
+          "once": false,
+          "conditions": [
+            "quest:shadow_book_ch1:stage:return_to_librarian",
+            "quest:shadow_book_ch1:has_item:library_card"
+          ],
+          "hidden_if_condition_fails": true,
+          "actions": [
+            "quest:shadow_book_ch1:take_quest_item:library_card",
+            "quest:shadow_book_ch1:give_quest_item:ruins_map",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        },
+        {
+          "id": "nothing",
+          "text": "Просто смотрю. Спасибо.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "need_card": {
+      "text": "«Книга Теней»? Да, такая есть... но она в закрытом архиве. Без читательского билета я не могу тебя пустить. Обратись к Твайлайт Спаркл — у неё наверняка есть запасной.",
+      "choices": [
+        {
+          "id": "ok",
+          "text": "Понял, схожу к Твайлайт.",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_librarian"],
+          "hidden_if_condition_fails": true,
+          "actions": ["quest:shadow_book_ch1:complete_stage"]
+        },
+        {
+          "id": "back",
+          "text": "Может что-то другое?",
+          "next": "start",
+          "once": false
+        }
+      ]
+    },
+    "access_granted": {
+      "text": "Отлично. Архив в конце зала, третья полка слева. Книга должна быть там... или в одном из сундуков. Удачи.",
+      "choices": [
+        {
+          "id": "thanks",
+          "text": "Благодарю!",
+          "next": null,
+          "once": false
+        }
+      ]
+    }
+  }
+}

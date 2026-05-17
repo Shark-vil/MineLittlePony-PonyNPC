@@ -2,12 +2,17 @@ package com.minelittlepony.ponynpc;
 
 import com.minelittlepony.ponynpc.command.PonyNpcCommand;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
+import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.network.NetworkHandler;
+import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
+import com.minelittlepony.ponynpc.trigger.ProximityTriggerManager;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 
 import org.slf4j.Logger;
@@ -22,7 +27,7 @@ public class PonyNpcMod implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC");
 
-    /** Short names of built-in skins (e.g. "applejack"), populated at startup. */
+    /** Короткие имена встроенных скинов (например "applejack"). Заполняется при старте. */
     public static final Set<String> BUILTIN_SKIN_NAMES = new TreeSet<>();
 
     @Override
@@ -36,9 +41,27 @@ public class PonyNpcMod implements ModInitializer {
 
         discoverBuiltinSkins();
 
+        // Загружаем диалоги и квесты при старте сервера
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            int count = DialogManager.getInstance().reload();
-            LOGGER.info("PonyNPC: loaded {} dialog(s)", count);
+            int dialogs = DialogManager.getInstance().reload();
+            int quests  = QuestManager.getInstance().reload();
+            LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s)", dialogs, quests);
+        });
+
+        // Тик: proximity-триггеры + WAIT_DAYS завершение
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            ProximityTriggerManager.getInstance().tick(server);
+            // Проверяем WAIT_DAYS раз в 200 тиков (10 сек)
+            if (server.getTicks() % 200 == 0) {
+                QuestManager.getInstance().tickWaitDays(server);
+            }
+        });
+
+        // При отключении игрока — чистим ghost NPC и proximity-триггеры
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            var uuid = handler.player.getUuid();
+            GhostNpcManager.getInstance().despawnAll(uuid);
+            ProximityTriggerManager.getInstance().clearForPlayer(uuid);
         });
     }
 
@@ -55,6 +78,6 @@ public class PonyNpcMod implements ModInitializer {
                 } catch (IOException ignored) {}
             }
         });
-        LOGGER.info("PonyNPC: discovered {} built-in skins", BUILTIN_SKIN_NAMES.size());
+        LOGGER.info("PonyNPC: discovered {} built-in skin(s)", BUILTIN_SKIN_NAMES.size());
     }
 }

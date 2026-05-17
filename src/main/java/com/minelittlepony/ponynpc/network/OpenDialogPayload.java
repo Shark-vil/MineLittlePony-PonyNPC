@@ -64,15 +64,20 @@ public record OpenDialogPayload(
         return ID;
     }
 
-    public record ChoiceData(String id, String text, boolean done) {
+    /**
+     * @param done      true = выбор уже был сделан ранее (once=true), отмечен ✓
+     * @param available false = выбор заблокирован условием (hiddenIfConditionFails=false), показывается серым
+     */
+    public record ChoiceData(String id, String text, boolean done, boolean available) {
         public static ChoiceData decode(PacketByteBuf buf) {
-            return new ChoiceData(buf.readString(), buf.readString(), buf.readBoolean());
+            return new ChoiceData(buf.readString(), buf.readString(), buf.readBoolean(), buf.readBoolean());
         }
 
         public void encode(PacketByteBuf buf) {
             buf.writeString(id);
             buf.writeString(text);
             buf.writeBoolean(done);
+            buf.writeBoolean(available);
         }
     }
 }

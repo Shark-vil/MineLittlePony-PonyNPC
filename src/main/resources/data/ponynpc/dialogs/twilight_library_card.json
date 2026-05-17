@@ -1,0 +1,119 @@
+{
+  "id": "twilight_library_card",
+  "nodes": {
+    "start": {
+      "text": "Привет! Я Твайлайт Спаркл. Чем могу помочь?",
+      "sound": "ponynpc:talk",
+      "sound_chars": 2,
+      "choices": [
+        {
+          "id": "ask_card",
+          "text": "Мне нужен читательский билет для архива библиотеки.",
+          "next": "card_question",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "nothing",
+          "text": "Просто хотел поздороваться.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "card_question": {
+      "text": "Читательский билет? Хм... Для чего именно тебе нужен архив?",
+      "choices": [
+        {
+          "id": "truth",
+          "text": "Я ищу старую книгу. Трикси сказала что она там.",
+          "next": "card_trust",
+          "once": false
+        },
+        {
+          "id": "vague",
+          "text": "Научные исследования. Изучение магической истории.",
+          "next": "card_skeptic",
+          "once": false
+        }
+      ]
+    },
+    "card_skeptic": {
+      "text": "Ну... это звучит расплывчато. Докажи что ты серьёзно относишься к учёбе — назови хотя бы одну книгу Старстрик по магии.",
+      "choices": [
+        {
+          "id": "correct_answer",
+          "text": "«Основы структуры заклинаний» Старстрик, первый том.",
+          "next": "card_give",
+          "once": false
+        },
+        {
+          "id": "wrong_answer",
+          "text": "Эм... «Самоучитель по магии»?",
+          "next": "card_denied",
+          "once": false
+        }
+      ]
+    },
+    "card_denied": {
+      "text": "Такой книги нет. Извини, но я не могу дать билет кому попало.",
+      "choices": [
+        {
+          "id": "try_again",
+          "text": "Погоди, я серьёзно! Мне это действительно нужно.",
+          "next": "card_trust",
+          "once": false
+        },
+        {
+          "id": "leave",
+          "text": "Ладно, я вернусь позже.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "card_trust": {
+      "text": "Хорошо. Я вижу что ты честен. Держи — это мой запасной читательский билет. Обращайся с книгами аккуратно!",
+      "choices": [
+        {
+          "id": "thanks",
+          "text": "Спасибо огромное, Твайлайт!",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": false,
+          "actions": [
+            "quest:shadow_book_ch1:give_quest_item:library_card",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        },
+        {
+          "id": "thanks_no_quest",
+          "text": "Спасибо!",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": true
+        }
+      ]
+    },
+    "card_give": {
+      "text": "Ты знаком с трудами Старстрик! Отлично. Держи запасной билет.",
+      "choices": [
+        {
+          "id": "thanks_correct",
+          "text": "Отличная книга, кстати. Спасибо!",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:find_twilight"],
+          "hidden_if_condition_fails": false,
+          "actions": [
+            "quest:shadow_book_ch1:give_quest_item:library_card",
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        }
+      ]
+    }
+  }
+}

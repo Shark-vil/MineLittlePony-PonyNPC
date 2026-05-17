@@ -7,6 +7,7 @@
 
 ## Содержание
 
+**Базовая документация**
 1. [Архитектура](#архитектура)
 2. [Установка и сборка](#установка-и-сборка)
 3. [Режимы диалога (DialogMode)](#режимы-диалога-dialogmode)
@@ -18,8 +19,12 @@
 9. [Как работает система диалогов](#как-работает-система-диалогов)
 10. [Структура пакетов](#структура-пакетов)
 11. [Прогресс игрока](#прогресс-игрока)
-12. [Расширение в будущем](#расширение-в-будущем)
-13. [Структура файлов проекта](#структура-файлов-проекта)
+12. [Структура файлов проекта](#структура-файлов-проекта)
+
+**Расширенная документация (wiki/)**
+- [Квестовая система](wiki/QUEST_SYSTEM.md) — квесты, этапы, квестовый карман
+- [Условия и действия диалогов](wiki/DIALOG_ACTIONS.md) — conditions/actions в DialogChoice
+- [Ghost NPC](wiki/GHOST_NPC.md) — NPC видимые только конкретным игрокам
 
 ---
 
@@ -382,6 +387,22 @@ Server: валидация → markChoiceDone() если once=true
 
 ---
 
+## Квестовая система (Phase 1)
+
+Квесты хранятся в `config/ponynpc/quests/*.json`.  
+Подробная документация: [wiki/QUEST_SYSTEM.md](wiki/QUEST_SYSTEM.md)
+
+Быстрый старт:
+```
+/ponynpc quest list                         — список квестов
+/ponynpc quest start shadow_book_ch1        — начать квест
+/ponynpc quest status shadow_book_ch1       — текущий этап
+/ponynpc pocket                             — содержимое квестового кармана
+/ponynpc reload                             — перезагрузить всё
+```
+
+---
+
 ## Расширение в будущем
 
 ### Новые режимы диалога
@@ -420,26 +441,37 @@ submod-ponynpc/
 ├── build.gradle
 ├── gradle.properties
 ├── WIKI.md
+├── wiki/                              ← Расширенная документация
+│   ├── QUEST_SYSTEM.md
+│   ├── DIALOG_ACTIONS.md
+│   └── GHOST_NPC.md
 │
 ├── src/main/resources/
 │   ├── fabric.mod.json
+│   ├── ponynpc.mixins.json            ← Mixin конфигурация
 │   ├── assets/ponynpc/
 │   │   ├── icon.png
 │   │   ├── sounds.json
 │   │   ├── sounds/dialog/
 │   │   │   ├── talk.ogg
 │   │   │   └── talk_magic.ogg
-│   │   ├── textures/skins/          ← PNG скины (короткое имя = имя файла без .png)
+│   │   ├── textures/skins/           ← PNG скины
 │   │   └── lang/en_us.json
-│   └── data/ponynpc/dialogs/
-│       ├── example.json
-│       └── example_random.json
+│   └── data/ponynpc/
+│       ├── dialogs/                  ← Встроенные примеры диалогов
+│       │   ├── example.json
+│       │   ├── example_random.json
+│       │   ├── trixie_encounter_1.json
+│       │   ├── librarian_dialog.json
+│       │   └── twilight_library_card.json
+│       └── quests/                   ← Встроенные примеры квестов
+│           └── shadow_book_ch1.json
 │
 └── src/main/java/com/minelittlepony/ponynpc/
-    ├── PonyNpcMod.java               Server entrypoint + обнаружение скинов
+    ├── PonyNpcMod.java               Server entrypoint
     ├── PonyNpcClient.java            Client entrypoint
     ├── entity/
-    │   └── PonyNpcEntity.java        Сущность (stationary, anchor, no collision)
+    │   └── PonyNpcEntity.java        NPC (stationary, ghost NPC support)
     ├── registry/
     │   ├── PonyNpcEntities.java
     │   └── PonyNpcSounds.java
@@ -447,22 +479,40 @@ submod-ponynpc/
     │   ├── DialogMode.java
     │   ├── DialogData.java
     │   ├── DialogNode.java
-    │   ├── DialogChoice.java
+    │   ├── DialogChoice.java         + conditions, actions, hiddenIfConditionFails
     │   └── DialogManager.java
     ├── network/
-    │   ├── OpenDialogPayload.java
+    │   ├── OpenDialogPayload.java    + ChoiceData.available
     │   ├── CloseDialogPayload.java
     │   ├── DialogChoicePayload.java
-    │   └── NetworkHandler.java
+    │   └── NetworkHandler.java       + условия/действия, ghost despawn
+    ├── quest/                        ← Новая квестовая система
+    │   ├── QuestStageType.java
+    │   ├── QuestStage.java
+    │   ├── QuestDefinition.java
+    │   ├── ProximityTriggerConfig.java
+    │   ├── GhostNpcSpawnConfig.java
+    │   ├── QuestManager.java
+    │   ├── QuestConditionChecker.java
+    │   └── QuestActionExecutor.java
     ├── state/
-    │   └── PlayerDialogState.java
+    │   ├── PlayerDialogState.java
+    │   ├── PlayerQuestState.java      ← Новый
+    │   ├── QuestStateStore.java       ← Новый
+    │   └── QuestPocketState.java      ← Новый
+    ├── ghost/                         ← Ghost NPC система
+    │   └── GhostNpcManager.java
+    ├── trigger/                       ← Proximity trigger система
+    │   └── ProximityTriggerManager.java
+    ├── mixin/                         ← Mixins
+    │   └── EntityTrackerMixin.java    Ghost NPC visibility filter
     ├── command/
-    │   └── PonyNpcCommand.java       /ponynpc + skin suggestions
+    │   └── PonyNpcCommand.java       + quest/pocket команды
     └── client/
         ├── render/
         │   └── PonyNpcRenderer.java
         └── screen/
-            └── DialogScreen.java
+            └── DialogScreen.java     + locked choice support
 ```
 
 ---

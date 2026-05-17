@@ -39,12 +39,13 @@ public class DialogScreen extends Screen {
     private static final int COLOR_SEPARATOR       = 0xFF555555;
     private static final int COLOR_NPC_NAME        = 0xFFD4A017;
     private static final int COLOR_TEXT            = 0xFFE8E8E8;
-    private static final int COLOR_CHOICE_NORMAL   = 0xFFCCCCCC;
-    private static final int COLOR_CHOICE_HOVER    = 0xFFFFFFFF;
-    private static final int COLOR_CHOICE_DONE     = 0xFF888888;
+    private static final int COLOR_CHOICE_NORMAL    = 0xFFCCCCCC;
+    private static final int COLOR_CHOICE_HOVER     = 0xFFFFFFFF;
+    private static final int COLOR_CHOICE_DONE      = 0xFF888888;
     private static final int COLOR_CHOICE_DONE_MARK = 0xFF55FF55;
-    private static final int COLOR_CHOICE_BG_HOVER = 0x44FFFFFF;
-    private static final int COLOR_HINT            = 0xFF666666;
+    private static final int COLOR_CHOICE_LOCKED    = 0xFF555555; // unavailable (condition failed)
+    private static final int COLOR_CHOICE_BG_HOVER  = 0x44FFFFFF;
+    private static final int COLOR_HINT             = 0xFF666666;
 
     private final UUID npcUuid;
     private final String npcName;
@@ -184,24 +185,24 @@ public class DialogScreen extends Screen {
 
             for (int i = 0; i < choices.size(); i++) {
                 var choice = choices.get(i);
-                boolean hovered = mouseY >= choiceY - 2 && mouseY < choiceY + lineH - 2
-                               && mouseX >= choiceX && mouseX < choiceX + choiceW;
+                boolean locked = !choice.available();
+                boolean hovered = !locked
+                    && mouseY >= choiceY - 2 && mouseY < choiceY + lineH - 2
+                    && mouseX >= choiceX && mouseX < choiceX + choiceW;
                 if (hovered) hoveredChoice = i;
 
                 if (hovered) {
                     ctx.fill(choiceX - 2, choiceY - 2, choiceX + choiceW + 2, choiceY + lineH - 2, COLOR_CHOICE_BG_HOVER);
                 }
 
-                // Стрелка + текст варианта
-                String prefix = choice.done() ? "  ✓ " : "  > ";
-                int color = choice.done()
-                    ? (hovered ? COLOR_CHOICE_DONE + 0x333333 : COLOR_CHOICE_DONE)
-                    : (hovered ? COLOR_CHOICE_HOVER : COLOR_CHOICE_NORMAL);
-
-                if (choice.done()) {
+                if (locked) {
+                    // Заблокировано условием — показываем серым без стрелки
+                    ctx.drawText(textRenderer, "  " + choice.text(), choiceX, choiceY, COLOR_CHOICE_LOCKED, false);
+                } else if (choice.done()) {
                     ctx.drawText(textRenderer, "✓", choiceX, choiceY, COLOR_CHOICE_DONE_MARK, true);
                     ctx.drawText(textRenderer, "  " + choice.text(), choiceX, choiceY, COLOR_CHOICE_DONE, true);
                 } else {
+                    int color = hovered ? COLOR_CHOICE_HOVER : COLOR_CHOICE_NORMAL;
                     ctx.drawText(textRenderer, "> " + choice.text(), choiceX, choiceY, color, true);
                 }
 
@@ -257,6 +258,7 @@ public class DialogScreen extends Screen {
     }
 
     private void selectChoice(OpenDialogPayload.ChoiceData choice) {
+        if (!choice.available()) return; // заблокировано условием
         ClientPlayNetworking.send(new DialogChoicePayload(npcUuid, nodeId, choice.id()));
     }
 

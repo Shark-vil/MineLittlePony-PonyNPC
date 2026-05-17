@@ -3,7 +3,9 @@ package com.minelittlepony.ponynpc.command;
 import com.minelittlepony.ponynpc.PonyNpcMod;
 import com.minelittlepony.ponynpc.dialog.DialogManager;
 import com.minelittlepony.ponynpc.entity.PonyNpcEntity;
+import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
+import com.minelittlepony.ponynpc.state.QuestPocketState;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -11,6 +13,7 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.server.command.ServerCommandSource;
@@ -23,7 +26,7 @@ import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Set;
+import java.util.*;
 
 import static net.minecraft.server.command.CommandManager.*;
 
@@ -32,18 +35,22 @@ public final class PonyNpcCommand {
     private static final Logger LOGGER = LoggerFactory.getLogger("PonyNPC/Command");
 
     private static final SuggestionProvider<ServerCommandSource> DIALOG_SUGGESTIONS = (ctx, builder) -> {
-        Set<String> ids = DialogManager.getInstance().getDialogIds();
-        ids.stream()
+        DialogManager.getInstance().getDialogIds().stream()
             .filter(id -> id.startsWith(builder.getRemaining()))
             .forEach(builder::suggest);
         return builder.buildFuture();
     };
 
-    /** Suggests built-in skin short names (e.g. "applejack") discovered at startup. */
     private static final SuggestionProvider<ServerCommandSource> SKIN_SUGGESTIONS = (ctx, builder) -> {
-        String remaining = builder.getRemaining();
         PonyNpcMod.BUILTIN_SKIN_NAMES.stream()
-            .filter(name -> name.startsWith(remaining))
+            .filter(n -> n.startsWith(builder.getRemaining()))
+            .forEach(builder::suggest);
+        return builder.buildFuture();
+    };
+
+    private static final SuggestionProvider<ServerCommandSource> QUEST_SUGGESTIONS = (ctx, builder) -> {
+        QuestManager.getInstance().getQuestIds().stream()
+            .filter(id -> id.startsWith(builder.getRemaining()))
             .forEach(builder::suggest);
         return builder.buildFuture();
     };
@@ -57,21 +64,19 @@ public final class PonyNpcCommand {
     private static void register(CommandDispatcher<ServerCommandSource> dispatcher,
                                   CommandRegistryAccess registryAccess) {
         dispatcher.register(literal("ponynpc")
-            .requires(source -> source.hasPermissionLevel(2))
+            .requires(src -> src.hasPermissionLevel(2))
 
+            // ── NPC spawn / remove ──────────────────────────────
             .then(literal("spawn")
                 .then(argument("dialog_id", StringArgumentType.string())
                     .suggests(DIALOG_SUGGESTIONS)
                     .executes(ctx -> spawnNpc(ctx,
                         StringArgumentType.getString(ctx, "dialog_id"), "", "", false))
-
                     .then(argument("skin", StringArgumentType.string())
                         .suggests(SKIN_SUGGESTIONS)
                         .executes(ctx -> spawnNpc(ctx,
                             StringArgumentType.getString(ctx, "dialog_id"),
                             StringArgumentType.getString(ctx, "skin"), "", false))
-
-                        // stationary flag as literal keyword (before name, so name can remain greedy)
                         .then(literal("stationary")
                             .executes(ctx -> spawnNpc(ctx,
                                 StringArgumentType.getString(ctx, "dialog_id"),
@@ -80,28 +85,92 @@ public final class PonyNpcCommand {
                                 .executes(ctx -> spawnNpc(ctx,
                                     StringArgumentType.getString(ctx, "dialog_id"),
                                     StringArgumentType.getString(ctx, "skin"),
-                                    StringArgumentType.getString(ctx, "name"), true)))
-                        )
-
+                                    StringArgumentType.getString(ctx, "name"), true))))
                         .then(argument("name", StringArgumentType.greedyString())
                             .executes(ctx -> spawnNpc(ctx,
                                 StringArgumentType.getString(ctx, "dialog_id"),
                                 StringArgumentType.getString(ctx, "skin"),
-                                StringArgumentType.getString(ctx, "name"), false)))
-                    )
-                )
-            )
+                                StringArgumentType.getString(ctx, "name"), false))))))
 
-            .then(literal("remove")
-                .executes(PonyNpcCommand::removeNpc))
+            .then(literal("remove").executes(PonyNpcCommand::removeNpc))
 
-            .then(literal("reload")
-                .executes(PonyNpcCommand::reloadDialogs))
+            // ── Reload (dialogs + quests) ────────────────────────
+            .then(literal("reload").executes(ctx -> {
+                int d = DialogManager.getInstance().reload();
+                int q = QuestManager.getInstance().reload();
+                ctx.getSource().sendFeedback(
+                    () -> Text.literal("[PonyNPC] Reloaded " + d + " dialog(s) and " + q + " quest(s)"),
+                    true
+                );
+                return d + q;
+            }))
 
-            .then(literal("list")
-                .executes(PonyNpcCommand::listDialogs))
+            .then(literal("list").executes(PonyNpcCommand::listDialogs))
+
+            // ── Quest management ─────────────────────────────────
+            .then(literal("quest")
+                .then(literal("list").executes(PonyNpcCommand::listQuests))
+
+                .then(literal("start")
+                    .then(argument("quest_id", StringArgumentType.string())
+                        .suggests(QUEST_SUGGESTIONS)
+                        .executes(ctx -> questStart(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "quest_id")))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> questStart(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "quest_id"))))))
+
+                .then(literal("status")
+                    .then(argument("quest_id", StringArgumentType.string())
+                        .suggests(QUEST_SUGGESTIONS)
+                        .executes(ctx -> questStatus(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "quest_id")))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> questStatus(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "quest_id"))))))
+
+                .then(literal("advance")
+                    .then(argument("quest_id", StringArgumentType.string())
+                        .suggests(QUEST_SUGGESTIONS)
+                        .executes(ctx -> questAdvance(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "quest_id")))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> questAdvance(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "quest_id")))))))
+
+            // ── Quest pocket ─────────────────────────────────────
+            .then(literal("pocket")
+                .executes(ctx -> showPocket(ctx, ctx.getSource().getPlayerOrThrow()))
+                .then(argument("target", EntityArgumentType.player())
+                    .executes(ctx -> showPocket(ctx, EntityArgumentType.getPlayer(ctx, "target"))))
+                .then(literal("give")
+                    .then(argument("item_id", StringArgumentType.word())
+                        .executes(ctx -> pocketGive(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "item_id"), 1))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> pocketGive(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "item_id"), 1)))))
+                .then(literal("take")
+                    .then(argument("item_id", StringArgumentType.word())
+                        .executes(ctx -> pocketTake(ctx,
+                            ctx.getSource().getPlayerOrThrow(),
+                            StringArgumentType.getString(ctx, "item_id")))
+                        .then(argument("target", EntityArgumentType.player())
+                            .executes(ctx -> pocketTake(ctx,
+                                EntityArgumentType.getPlayer(ctx, "target"),
+                                StringArgumentType.getString(ctx, "item_id")))))))
         );
     }
+
+    // ── NPC spawn / remove ────────────────────────────────────────
 
     private static int spawnNpc(CommandContext<ServerCommandSource> ctx,
                                  String dialogId, String skin, String name, boolean stationary) {
@@ -110,33 +179,28 @@ public final class PonyNpcCommand {
             var world = player.getServerWorld();
 
             PonyNpcEntity npc = PonyNpcEntities.PONY_NPC.create(world);
-            if (npc == null) {
-                ctx.getSource().sendError(Text.literal("[PonyNPC] Failed to create entity"));
-                return 0;
-            }
+            if (npc == null) { ctx.getSource().sendError(Text.literal("[PonyNPC] Failed to create entity")); return 0; }
 
             double yawRad = Math.toRadians(player.getYaw());
-            double spawnX = player.getX() - Math.sin(yawRad);
-            double spawnZ = player.getZ() + Math.cos(yawRad);
-            npc.refreshPositionAndAngles(spawnX, player.getY(), spawnZ, player.getYaw() + 180, 0);
+            npc.refreshPositionAndAngles(
+                player.getX() - Math.sin(yawRad),
+                player.getY(),
+                player.getZ() + Math.cos(yawRad),
+                player.getYaw() + 180, 0
+            );
 
             npc.initialize(world, world.getLocalDifficulty(npc.getBlockPos()), SpawnReason.COMMAND, null);
             npc.setPersistent();
-
             npc.setDialogId(dialogId);
             if (!skin.isEmpty()) npc.setSkinId(skin);
             npc.setNpcDisplayName(name.isEmpty() ? dialogId : name);
             npc.setCustomNameVisible(true);
             npc.setStationary(stationary);
 
-            world.getServer().execute(() -> {
-                world.spawnEntityAndPassengers(npc);
-                LOGGER.info("[PonyNPC] Spawned id={} stationary={}", npc.getId(), stationary);
-            });
+            world.getServer().execute(() -> world.spawnEntityAndPassengers(npc));
 
             ctx.getSource().sendFeedback(
-                () -> Text.literal("[PonyNPC] Spawned NPC: dialog=" + dialogId
-                    + (stationary ? " [stationary]" : "")),
+                () -> Text.literal("[PonyNPC] Spawned NPC: dialog=" + dialogId + (stationary ? " [stationary]" : "")),
                 true
             );
             return 1;
@@ -149,25 +213,20 @@ public final class PonyNpcCommand {
     private static int removeNpc(CommandContext<ServerCommandSource> ctx) {
         try {
             ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-
-            double distance = 5.0;
+            double dist = 5.0;
             Vec3d start = player.getCameraPosVec(1.0F);
             Vec3d dir   = player.getRotationVec(1.0F);
-            Vec3d end   = start.add(dir.multiply(distance));
-            Box searchBox = player.getBoundingBox().stretch(dir.multiply(distance)).expand(1.0);
+            Vec3d end   = start.add(dir.multiply(dist));
+            Box box = player.getBoundingBox().stretch(dir.multiply(dist)).expand(1.0);
 
             EntityHitResult hit = ProjectileUtil.raycast(
-                player, start, end, searchBox,
-                e -> e instanceof PonyNpcEntity,
-                distance * distance
-            );
+                player, start, end, box, e -> e instanceof PonyNpcEntity, dist * dist);
 
             if (hit != null && hit.getEntity() instanceof PonyNpcEntity npc) {
                 npc.discard();
                 ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] NPC removed"), true);
                 return 1;
             }
-
             ctx.getSource().sendError(Text.literal("[PonyNPC] Look at a Pony NPC to remove it"));
             return 0;
         } catch (Exception e) {
@@ -176,32 +235,121 @@ public final class PonyNpcCommand {
         }
     }
 
-    private static int reloadDialogs(CommandContext<ServerCommandSource> ctx) {
-        int count = DialogManager.getInstance().reload();
-        ctx.getSource().sendFeedback(
-            () -> Text.literal("[PonyNPC] Reloaded " + count + " dialog(s)"),
-            true
-        );
-        return count;
-    }
+    // ── Dialog listing ────────────────────────────────────────────
 
     private static int listDialogs(CommandContext<ServerCommandSource> ctx) {
         var byMode = DialogManager.getInstance().getDialogIdsByMode();
         if (byMode.isEmpty()) {
-            ctx.getSource().sendFeedback(
-                () -> Text.literal("[PonyNPC] No dialogs loaded. Place JSON files in config/ponynpc/dialogs/"),
-                false
-            );
+            ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] No dialogs loaded."), false);
             return 0;
         }
-        int total = byMode.values().stream().mapToInt(java.util.List::size).sum();
-        ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + total + " dialog(s) loaded:"), false);
+        int total = byMode.values().stream().mapToInt(List::size).sum();
+        ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + total + " dialog(s):"), false);
         byMode.forEach((mode, ids) ->
             ctx.getSource().sendFeedback(
-                () -> Text.literal("  [" + mode.name().toLowerCase() + "] " + String.join(", ", ids)),
-                false
-            )
+                () -> Text.literal("  [" + mode.name().toLowerCase() + "] " + String.join(", ", ids)), false)
         );
         return total;
+    }
+
+    // ── Quest commands ────────────────────────────────────────────
+
+    private static int listQuests(CommandContext<ServerCommandSource> ctx) {
+        Set<String> ids = QuestManager.getInstance().getQuestIds();
+        if (ids.isEmpty()) {
+            ctx.getSource().sendFeedback(
+                () -> Text.literal("[PonyNPC] No quests loaded. Place JSON in config/ponynpc/quests/"), false);
+            return 0;
+        }
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] " + ids.size() + " quest(s): " + String.join(", ", ids)), false);
+        return ids.size();
+    }
+
+    private static int questStart(CommandContext<ServerCommandSource> ctx,
+                                   ServerPlayerEntity target, String questId) {
+        QuestManager qm = QuestManager.getInstance();
+        if (qm.getQuest(questId).isEmpty()) {
+            ctx.getSource().sendError(Text.literal("[PonyNPC] Quest not found: " + questId));
+            return 0;
+        }
+        qm.startQuest(target, questId);
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] Quest '" + questId + "' started for " + target.getName().getString()),
+            true
+        );
+        return 1;
+    }
+
+    private static int questStatus(CommandContext<ServerCommandSource> ctx,
+                                    ServerPlayerEntity target, String questId) {
+        QuestManager qm = QuestManager.getInstance();
+        String playerName = target.getName().getString();
+        if (!qm.isQuestStarted(target, questId)) {
+            ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + playerName + " has not started '" + questId + "'"), false);
+            return 0;
+        }
+        if (qm.isQuestComplete(target, questId)) {
+            ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + playerName + ": quest '" + questId + "' — COMPLETE"), false);
+            return 1;
+        }
+        String stage = qm.getCurrentStage(target, questId).orElse("?");
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] " + playerName + ": quest '" + questId + "' — stage: " + stage), false);
+        return 1;
+    }
+
+    private static int questAdvance(CommandContext<ServerCommandSource> ctx,
+                                     ServerPlayerEntity target, String questId) {
+        QuestManager qm = QuestManager.getInstance();
+        if (!qm.isQuestStarted(target, questId)) {
+            ctx.getSource().sendError(Text.literal("[PonyNPC] Player has not started this quest"));
+            return 0;
+        }
+        qm.completeCurrentStage(target, questId);
+        String stage = qm.getCurrentStage(target, questId).orElse("COMPLETE");
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] Advanced quest '" + questId + "' — now on: " + stage), true);
+        return 1;
+    }
+
+    // ── Quest pocket ──────────────────────────────────────────────
+
+    private static int showPocket(CommandContext<ServerCommandSource> ctx, ServerPlayerEntity target) {
+        var pocket = QuestPocketState.getOrCreate(target.getServer()).getPocket(target.getUuid());
+        String name = target.getName().getString();
+        if (pocket.isEmpty()) {
+            ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + name + "'s quest pocket is empty"), false);
+            return 0;
+        }
+        ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] " + name + "'s quest pocket:"), false);
+        pocket.forEach((itemId, count) ->
+            ctx.getSource().sendFeedback(() -> Text.literal("  - " + itemId + " x" + count), false)
+        );
+        return pocket.size();
+    }
+
+    private static int pocketGive(CommandContext<ServerCommandSource> ctx,
+                                   ServerPlayerEntity target, String itemId, int count) {
+        QuestPocketState.getOrCreate(target.getServer()).giveItem(target.getUuid(), itemId, count);
+        ctx.getSource().sendFeedback(
+            () -> Text.literal("[PonyNPC] Gave quest item '" + itemId + "' to " + target.getName().getString()),
+            true
+        );
+        return 1;
+    }
+
+    private static int pocketTake(CommandContext<ServerCommandSource> ctx,
+                                   ServerPlayerEntity target, String itemId) {
+        boolean ok = QuestPocketState.getOrCreate(target.getServer()).takeItem(target.getUuid(), itemId);
+        if (ok) {
+            ctx.getSource().sendFeedback(
+                () -> Text.literal("[PonyNPC] Took quest item '" + itemId + "' from " + target.getName().getString()),
+                true
+            );
+            return 1;
+        }
+        ctx.getSource().sendError(Text.literal("[PonyNPC] Player doesn't have '" + itemId + "'"));
+        return 0;
     }
 }

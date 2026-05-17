@@ -1,0 +1,78 @@
+{
+  "id": "trixie_encounter_1",
+  "nodes": {
+    "start": {
+      "text": "О! Новый путник! Великая и Могучая Трикси приветствует тебя в Понивилле!",
+      "sound": "ponynpc:talk_magic",
+      "sound_chars": 3,
+      "choices": [
+        {
+          "id": "ask_about_town",
+          "text": "Здравствуй. Что это за место?",
+          "next": "about_ponyville",
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
+          "hidden_if_condition_fails": false
+        },
+        {
+          "id": "ask_favor",
+          "text": "Мне нужна помощь... Я ищу одну книгу.",
+          "next": "book_task",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
+          "hidden_if_condition_fails": true,
+          "actions": []
+        },
+        {
+          "id": "bye",
+          "text": "Не важно, до свидания.",
+          "next": null,
+          "once": false
+        }
+      ]
+    },
+    "about_ponyville": {
+      "text": "Это Понивилль — лучший городок в Эквестрии! Тут можно найти всё что угодно... если знать где искать.",
+      "choices": [
+        {
+          "id": "ask_book",
+          "text": "Значит ты знаешь местную библиотеку?",
+          "next": "book_task",
+          "once": true,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
+          "hidden_if_condition_fails": true
+        },
+        {
+          "id": "back",
+          "text": "Спасибо за информацию.",
+          "next": "start",
+          "once": false
+        }
+      ]
+    },
+    "book_task": {
+      "text": "Книга? Трикси слышала о некой «Книге Теней». Она должна быть где-то в библиотеке... Поищи там, говорят там целая куча старых сундуков. Только сначала поговори с Библиотекарем — вечно она путается в своих полках.",
+      "sound": "ponynpc:talk_magic",
+      "sound_chars": 3,
+      "choices": [
+        {
+          "id": "accept",
+          "text": "Хорошо, займусь этим.",
+          "next": null,
+          "once": false,
+          "conditions": ["quest:shadow_book_ch1:stage:talk_to_trixie"],
+          "hidden_if_condition_fails": true,
+          "actions": [
+            "quest:shadow_book_ch1:complete_stage"
+          ]
+        },
+        {
+          "id": "not_now",
+          "text": "Подумаю об этом.",
+          "next": null,
+          "once": false
+        }
+      ]
+    }
+  }
+}

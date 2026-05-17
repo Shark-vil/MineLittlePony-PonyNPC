@@ -113,6 +113,10 @@ public final class DialogManager {
     private void copyBuiltinExamples(Path dir) {
         copyBuiltin(dir, "example.json");
         copyBuiltin(dir, "example_random.json");
+        // Quest dialog examples
+        copyBuiltin(dir, "trixie_encounter_1.json");
+        copyBuiltin(dir, "librarian_dialog.json");
+        copyBuiltin(dir, "twilight_library_card.json");
     }
 
     private void copyBuiltin(Path dir, String name) {

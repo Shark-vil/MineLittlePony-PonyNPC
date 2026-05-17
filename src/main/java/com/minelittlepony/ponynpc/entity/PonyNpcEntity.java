@@ -35,6 +35,11 @@ public class PonyNpcEntity extends PathAwareEntity {
     private boolean hasAnchor = false;
     private double anchorX, anchorY, anchorZ;
 
+    // Ghost NPC — видим только указанным игрокам, не сохраняется в мире
+    private final java.util.Set<java.util.UUID> visibleToPlayers = new java.util.HashSet<>();
+    private boolean ghostNpc = false;
+    private boolean despawnAfterDialog = false;
+
     public PonyNpcEntity(EntityType<? extends PathAwareEntity> type, World world) {
         super(type, world);
         this.setInvulnerable(true);
@@ -179,6 +184,28 @@ public class PonyNpcEntity extends PathAwareEntity {
         if (!this.npcDisplayName.isEmpty()) {
             this.setCustomName(net.minecraft.text.Text.literal(this.npcDisplayName));
         }
+    }
+
+    // ---- Ghost NPC ----
+
+    /** true если этот NPC видим только для игроков из visibleToPlayers. */
+    public boolean isGhostNpc() { return ghostNpc; }
+    public void setGhostNpc(boolean ghost) { this.ghostNpc = ghost; }
+
+    /** true = NPC удаляется когда игрок закрывает диалог. */
+    public boolean isDespawnAfterDialog() { return despawnAfterDialog; }
+    public void setDespawnAfterDialog(boolean b) { this.despawnAfterDialog = b; }
+
+    public void addVisibleTo(java.util.UUID playerUuid) { visibleToPlayers.add(playerUuid); }
+    public void removeVisibleTo(java.util.UUID playerUuid) { visibleToPlayers.remove(playerUuid); }
+
+    /**
+     * Проверяет, может ли данный игрок видеть этот NPC.
+     * Если visibleToPlayers пуст — видят все (обычный NPC).
+     */
+    public boolean isVisibleTo(net.minecraft.server.network.ServerPlayerEntity player) {
+        if (visibleToPlayers.isEmpty()) return true;
+        return visibleToPlayers.contains(player.getUuid());
     }
 
     // ---- Stationary ----
