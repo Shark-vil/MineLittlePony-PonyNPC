@@ -76,32 +76,73 @@
 
 ## Proximity Trigger
 
-Любой этап может иметь `proximity_trigger` — срабатывает когда игрок входит в зону, находясь на этом этапе:
+Любой этап может иметь `proximity_trigger` — срабатывает когда игрок входит в зону, находясь на этом этапе.
+
+Проверяется каждые 20 тиков. Триггер **не срабатывает повторно** пока spawned entity жив; сбрасывается когда игрок покидает радиус и entity удалён.
+
+### Режимы триггера
+
+#### 1. `ghost_npc` (по умолчанию)
+
+Спаунит пони-NPC видимого только этому игроку. Опционально выполняет `actions` немедленно.
 
 ```json
-{
-  "type": "dialog",
-  "next_stage": "find_book",
-  "proximity_trigger": {
-    "dimension": "minecraft:overworld",
-    "x": 100,
-    "y": 64,
-    "z": -50,
-    "radius": 15.0,
-    "spawn_ghost_npc": {
-      "dialog_id": "trixie_encounter_1",
-      "skin": "trixie",
-      "name": "Trixie",
-      "auto_dialog": true,
-      "despawn_after_dialog": true
-    },
-    "actions": []
+"proximity_trigger": {
+  "dimension": "minecraft:overworld",
+  "x": 100, "y": 64, "z": -50,
+  "radius": 15.0,
+  "spawn_ghost_npc": {
+    "dialog_id": "trixie_encounter_1",
+    "skin": "trixie",
+    "name": "Trixie",
+    "auto_dialog": true,
+    "despawn_after_dialog": true
+  },
+  "actions": []
+}
+```
+
+#### 2. `spawn_marker`
+
+Спаунит кликабельный маркер (вращающийся золотой куб с плашкой). Игрок нажимает ПКМ — выполняются `actions` маркера, маркер исчезает.
+
+```json
+"proximity_trigger": {
+  "dimension": "minecraft:overworld",
+  "x": 100, "y": 64, "z": 200,
+  "radius": 10.0,
+  "spawn_marker": {
+    "name": "Забрать книгу",
+    "actions": ["quest:shadow_book_ch1:complete_stage:enter_ruins"]
   }
 }
 ```
 
-Поля `spawn_ghost_npc` и `actions` опциональны.  
-Триггер срабатывает **один раз** за стадию квеста.
+#### 3. `auto_complete`
+
+Немедленно выполняет `actions` при входе в зону, без спауна какой-либо сущности. Используется для автоматического перехода этапа зоной.
+
+```json
+"proximity_trigger": {
+  "dimension": "minecraft:overworld",
+  "x": 0, "y": 64, "z": 0,
+  "radius": 5.0,
+  "auto_complete": true,
+  "actions": ["quest:my_quest:complete_stage"]
+}
+```
+
+### Поля `proximity_trigger`
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `dimension` | string | ID измерения (например `"minecraft:overworld"`) |
+| `x`, `y`, `z` | double | Центр зоны |
+| `radius` | double | Радиус в блоках |
+| `spawn_ghost_npc` | object | Конфиг пони-NPC (режим ghost_npc) |
+| `spawn_marker` | object | Конфиг маркера: `name` + `actions` |
+| `auto_complete` | bool | Если `true` — режим auto_complete |
+| `actions` | array | Действия для ghost_npc и auto_complete режимов |
 
 ---
 
