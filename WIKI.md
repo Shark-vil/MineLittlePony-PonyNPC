@@ -30,6 +30,7 @@
 - [Квестовая система](wiki/QUEST_SYSTEM.md) — квесты, этапы, proximity trigger, квестовый карман
 - [Условия и действия диалогов](wiki/DIALOG_ACTIONS.md) — conditions/actions в DialogChoice
 - [Ghost NPC](wiki/GHOST_NPC.md) — NPC видимые только конкретным игрокам
+- [Пример: квест «Книга Теней»](wiki/QUEST_EXAMPLE_SHADOW_BOOK.md) — полный разбор реального квеста с комментариями
 
 ---
 
@@ -89,6 +90,7 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 |-------|----------|
 | `"quest"` | Ветвистый диалог с узлами, выборами и прогрессом (по умолчанию) |
 | `"random"` | Случайная реплика из списка `phrases`, без выборов |
+| `"router"` | Маршрутизатор: выбирает нужный диалог по условиям квеста |
 
 ### QUEST (по умолчанию)
 - Загружает узел `"start"`, показывает варианты ответа.
@@ -98,6 +100,38 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 ### RANDOM
 - Выбирает одну строку из массива `phrases` случайным образом.
 - Нет выборов → игрок читает и нажимает ESC.
+
+### ROUTER
+- Содержит список записей `entries` — каждая указывает `dialog` и опциональный массив `conditions`.
+- Сервер проверяет записи **по порядку** и открывает первый диалог, у которого все условия выполнены.
+- Запись без `conditions` (или с пустым массивом) — безусловный **fallback**.
+- Позволяет переиспользовать одного NPC для нескольких квестовых состояний.
+- Целевые диалоги могут быть любого режима (`quest` / `random`). Вложенные роутеры не поддерживаются.
+
+**Пример: библиотекарь с тремя состояниями**
+```json
+{
+  "id": "librarian",
+  "mode": "router",
+  "entries": [
+    {
+      "dialog": "librarian_ch1_active",
+      "conditions": ["quest:shadow_book_ch1:stage:talk_to_librarian"]
+    },
+    {
+      "dialog": "librarian_ch1_return",
+      "conditions": ["quest:shadow_book_ch1:stage:return_to_librarian"]
+    },
+    {
+      "dialog": "librarian_idle"
+    }
+  ]
+}
+```
+При таком файле NPC `librarian` будет:
+- говорить `librarian_ch1_active` если игрок на этапе `talk_to_librarian`,
+- говорить `librarian_ch1_return` если игрок на этапе `return_to_librarian`,
+- и в любом другом случае — `librarian_idle`.
 
 ---
 
@@ -146,6 +180,28 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 }
 ```
 
+### Пример: ROUTER
+
+```json
+{
+  "id": "librarian",
+  "mode": "router",
+  "entries": [
+    {
+      "dialog": "librarian_ch1_active",
+      "conditions": ["quest:shadow_book_ch1:stage:talk_to_librarian"]
+    },
+    {
+      "dialog": "librarian_ch1_return",
+      "conditions": ["quest:shadow_book_ch1:stage:return_to_librarian"]
+    },
+    {
+      "dialog": "librarian_idle"
+    }
+  ]
+}
+```
+
 ### Поля
 
 #### Корневой объект
@@ -153,11 +209,19 @@ JAR появится в `build/libs/ponynpc-dev-1.1.0+1.21.jar`.
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `id` | string | ID диалога. Если пустой — из имени файла. |
-| `mode` | string | `"quest"` (по умолчанию) или `"random"`. |
+| `mode` | string | `"quest"` (по умолчанию), `"random"` или `"router"`. |
 | `nodes` | object | Словарь узлов (QUEST). **Обязателен узел `"start"`**. |
 | `phrases` | array | Список реплик (RANDOM). |
 | `sound` | string | Sound event ID (RANDOM). По умолчанию: `"ponynpc:talk"`. |
 | `sound_chars` | int | Интервал звука в символах. По умолчанию: `2`. |
+| `entries` | array | Список записей маршрутизатора (ROUTER). |
+
+#### RouterEntry (ROUTER)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `dialog` | string | ID целевого диалога. |
+| `conditions` | array | Список условий (все должны выполняться). Пусто = всегда (fallback). |
 
 #### DialogChoice
 
