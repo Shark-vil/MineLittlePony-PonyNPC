@@ -286,7 +286,7 @@ public final class NetworkHandler {
         if (entity instanceof PonyNpcEntity ponyNpc) {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
         } else if (entity instanceof QuestMarkerEntity marker) {
-            if (!marker.isRemoved()) marker.discard();
+            if (!marker.isRemoved() && !marker.isPermanent()) marker.discard();
         }
     }
 

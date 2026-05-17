@@ -83,6 +83,11 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity, ID
         visibleToPlayers.add(uuid);
     }
 
+    /** Постоянный маркер (spawn_marker команда) — не привязан к конкретным игрокам. */
+    public boolean isPermanent() {
+        return visibleToPlayers.isEmpty();
+    }
+
     @Override
     public boolean isVisibleTo(ServerPlayerEntity player) {
         return visibleToPlayers.isEmpty() || visibleToPlayers.contains(player.getUuid());
