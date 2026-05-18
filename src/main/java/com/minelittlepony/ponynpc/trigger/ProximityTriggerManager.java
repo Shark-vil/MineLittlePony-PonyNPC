@@ -103,6 +103,47 @@ public final class ProximityTriggerManager {
                     }
                 });
             }
+
+            // Auto-start quests whose start stage has a proximity trigger
+            for (String questId : qm.getQuestIds()) {
+                if (store.isStarted(playerUuid, questId)) continue;
+
+                qm.getQuest(questId).ifPresent(def -> {
+                    if (def.startStage == null) return;
+                    def.getStage(def.startStage).ifPresent(startStage -> {
+                        ProximityTriggerConfig trigger = startStage.proximityTrigger;
+                        if (trigger == null) return;
+
+                        String fireKey = playerUuid + ":" + questId + ":" + def.startStage;
+                        boolean inRange = isPlayerInRange(player, server, trigger);
+
+                        if (inRange) {
+                            playersInRange.add(fireKey);
+
+                            if (firedTriggers.contains(fireKey)) {
+                                Entity entity = triggerEntities.get(fireKey);
+                                if (entity != null && !entity.isRemoved()) return;
+                                firedTriggers.remove(fireKey);
+                                triggerEntities.remove(fireKey);
+                            }
+
+                            firedTriggers.add(fireKey);
+                            qm.startQuest(player, questId);
+                            Entity spawned = fireTrigger(player, server, questId, def.startStage, trigger);
+                            triggerEntities.put(fireKey, spawned);
+
+                        } else {
+                            if (playersInRange.remove(fireKey)) {
+                                Entity entity = triggerEntities.get(fireKey);
+                                if (entity == null || entity.isRemoved()) {
+                                    firedTriggers.remove(fireKey);
+                                    triggerEntities.remove(fireKey);
+                                }
+                            }
+                        }
+                    });
+                });
+            }
         }
 
         cleanupFiredTriggers(server, store);

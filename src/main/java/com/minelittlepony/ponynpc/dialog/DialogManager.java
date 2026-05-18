@@ -40,12 +40,12 @@ public final class DialogManager {
         if (!Files.exists(dialogDir)) {
             try {
                 Files.createDirectories(dialogDir);
-                copyBuiltinExamples(dialogDir);
             } catch (IOException e) {
                 LOGGER.error("Failed to create dialog directory", e);
                 return 0;
             }
         }
+        copyBuiltinExamples(dialogDir);
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dialogDir, "*.json")) {
             for (Path file : stream) {
@@ -120,10 +120,19 @@ public final class DialogManager {
     private void copyBuiltinExamples(Path dir) {
         copyBuiltin(dir, "example.json");
         copyBuiltin(dir, "example_random.json");
-        // Quest dialog examples
+        // shadow_book_ch1 quest dialogs
         copyBuiltin(dir, "trixie_encounter_1.json");
+        copyBuiltin(dir, "trixie_main.json");
         copyBuiltin(dir, "librarian_dialog.json");
-        copyBuiltin(dir, "twilight_library_card.json");
+        copyBuiltin(dir, "twilight_main.json");
+        copyBuiltin(dir, "archive_book.json");
+        copyBuiltin(dir, "library_shelf_random.json");
+        copyBuiltin(dir, "ruins_entrance.json");
+        copyBuiltin(dir, "shadow_ruins_exit.json");
+        copyBuiltin(dir, "informant_bon_bon.json");
+        copyBuiltin(dir, "informant_lyra.json");
+        copyBuiltin(dir, "informant_berry_punch.json");
+        copyBuiltin(dir, "informant_vinyl.json");
     }
 
     private void copyBuiltin(Path dir, String name) {

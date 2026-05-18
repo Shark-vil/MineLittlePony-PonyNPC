@@ -31,12 +31,12 @@ public final class DungeonRegistry {
         if (!Files.exists(dir)) {
             try {
                 Files.createDirectories(dir);
-                copyBuiltin(dir, "shadow_ruins.json");
             } catch (IOException e) {
                 LOGGER.error("Failed to create dungeon directory", e);
                 return 0;
             }
         }
+        copyBuiltin(dir, "shadow_ruins.json");
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.json")) {
             for (Path file : stream) loadDungeon(file);
         } catch (IOException e) {

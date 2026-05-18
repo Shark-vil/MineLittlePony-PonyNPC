@@ -31,7 +31,7 @@
           "conditions": ["quest:shadow_book_ch1:stage:find_book_location"],
           "hidden_if_condition_fails": true,
           "actions": [
-            "message:[Архив] Координаты руин: X=??? Z=??? — замени на реальные в файле archive_book.json",
+            "message:[Архив] Координаты Руин Теней: X=150, Y=64, Z=150",
             "quest:shadow_book_ch1:complete_stage"
           ]
         },

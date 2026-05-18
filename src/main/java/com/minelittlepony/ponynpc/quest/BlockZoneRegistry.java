@@ -35,9 +35,10 @@ public final class BlockZoneRegistry {
                 Files.createDirectories(dir);
             } catch (IOException e) {
                 LOGGER.error("Failed to create block_zones directory", e);
+                return 0;
             }
-            return 0;
         }
+        copyBuiltinExamples(dir);
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.json")) {
             for (Path file : stream) {
@@ -58,5 +59,22 @@ public final class BlockZoneRegistry {
 
         LOGGER.info("Loaded {} block zone(s)", zones.size());
         return zones.size();
+    }
+
+    private void copyBuiltinExamples(Path dir) {
+        copyBuiltin(dir, "library_archive.json");
+    }
+
+    private void copyBuiltin(Path dir, String name) {
+        Path target = dir.resolve(name);
+        if (Files.exists(target)) return;
+        try (var stream = getClass().getResourceAsStream("/data/ponynpc/block_zones/" + name)) {
+            if (stream != null) {
+                Files.copy(stream, target);
+                LOGGER.info("Copied block zone example: {}", name);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Could not copy block zone example '{}'", name, e);
+        }
     }
 }

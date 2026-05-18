@@ -467,13 +467,27 @@ Server: валидация условий → executeAll(actions) → навиг
 
 ### Маркер завершения данжа (finish_marker)
 
+Поддерживает два варианта — диалог или actions:
+
 ```json
 "finish_marker": {
   "name": "Алтарь Теней",
-  "offset": { "x": 4, "y": 4, "z": 9 },
-  "actions": ["dungeon:complete", "quest:shadow_book_ch1:complete_stage:enter_ruins"]
+  "offset": { "x": 25, "y": 1, "z": 65 },
+  "dialog_id": "shadow_ruins_exit"
 }
 ```
+
+Если задан `dialog_id` — при клике открывается диалог, `actions` игнорируются. Действие `dungeon:complete` вызывается из самого диалога. Это рекомендуемый способ — даёт игроку выбор когда завершить данж.
+
+```json
+"finish_marker": {
+  "name": "Выход",
+  "offset": { "x": 25, "y": 1, "z": 65 },
+  "actions": ["dungeon:complete"]
+}
+```
+
+Вариант без диалога — данж завершается немедленно при клике.
 
 ---
 

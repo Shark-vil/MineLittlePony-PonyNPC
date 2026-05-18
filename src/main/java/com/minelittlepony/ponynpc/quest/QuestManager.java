@@ -37,12 +37,12 @@ public final class QuestManager {
         if (!Files.exists(questDir)) {
             try {
                 Files.createDirectories(questDir);
-                copyBuiltinExamples(questDir);
             } catch (IOException e) {
                 LOGGER.error("Failed to create quest directory", e);
                 return 0;
             }
         }
+        copyBuiltinExamples(questDir);
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(questDir, "*.json")) {
             for (Path file : stream) loadQuest(file);
         } catch (IOException e) {
