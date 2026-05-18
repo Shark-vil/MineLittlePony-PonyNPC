@@ -163,11 +163,11 @@ public final class QuestActionExecutor {
 
     private static void giveCurrency(ServerPlayerEntity player, int amount) {
         if (amount <= 0) return;
-        // Раздаём стаки по 64
-        while (amount > 0) {
-            int batch = Math.min(amount, 64);
+        int remaining = amount;
+        while (remaining > 0) {
+            int batch = Math.min(remaining, 64);
             player.giveItemStack(new ItemStack(Items.GOLD_NUGGET, batch));
-            amount -= batch;
+            remaining -= batch;
         }
         sendQuestMessage(player, "Received " + amount + " gold nugget(s)");
     }

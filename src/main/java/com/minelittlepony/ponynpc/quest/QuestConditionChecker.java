@@ -50,8 +50,8 @@ public final class QuestConditionChecker {
             return checkDungeonCondition(player, parts);
         }
 
-        LOGGER.warn("Unknown condition namespace: '{}'", parts[0]);
-        return true;
+        LOGGER.warn("Unknown condition namespace: '{}' — treating as NOT met", parts[0]);
+        return false;
     }
 
     private static boolean checkDungeonCondition(ServerPlayerEntity player, String[] parts) {

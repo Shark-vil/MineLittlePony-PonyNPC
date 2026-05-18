@@ -50,6 +50,13 @@ public class QuestMarkerEntity extends Entity implements PlayerVisibleEntity, ID
         this.visibleToPlayers.add(visibleTo);
     }
 
+    /** Временный маркер с диалогом (например finishMarker данжа) — видим конкретному игроку. */
+    public void setupDialog(String name, String dialogId, UUID visibleTo) {
+        this.setCustomName(Text.literal(name));
+        this.dialogId = dialogId != null ? dialogId : "";
+        this.visibleToPlayers.add(visibleTo);
+    }
+
     /** Постоянный маркер (placed via command) — видим всем игрокам. */
     public void setupPermanent(String name, String dialogId, ItemStack displayItem) {
         this.setCustomName(Text.literal(name));

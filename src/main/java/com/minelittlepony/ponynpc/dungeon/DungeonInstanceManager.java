@@ -148,10 +148,19 @@ public final class DungeonInstanceManager {
             double mZ = dstOrigin.getZ() + def.finishMarker.offset.z + 0.5;
             QuestMarkerEntity marker = PonyNpcEntities.QUEST_MARKER.create(dungeonWorld);
             if (marker != null) {
+                boolean useDialog = def.finishMarker.dialogId != null && !def.finishMarker.dialogId.isEmpty();
                 boolean first = true;
                 for (ServerPlayerEntity p : participants) {
-                    if (first) { marker.setup(def.finishMarker.name, def.finishMarker.actions, p.getUuid()); first = false; }
-                    else marker.addVisibleTo(p.getUuid());
+                    if (first) {
+                        if (useDialog) {
+                            marker.setupDialog(def.finishMarker.name, def.finishMarker.dialogId, p.getUuid());
+                        } else {
+                            marker.setup(def.finishMarker.name, def.finishMarker.actions, p.getUuid());
+                        }
+                        first = false;
+                    } else {
+                        marker.addVisibleTo(p.getUuid());
+                    }
                 }
                 marker.refreshPositionAndAngles(mX, mY, mZ, 0, 0);
                 dungeonWorld.spawnEntity(marker);

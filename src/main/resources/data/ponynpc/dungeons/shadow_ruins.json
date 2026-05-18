@@ -7,7 +7,7 @@
   "finish_marker": {
     "name": "Алтарь Теней",
     "offset": {"x": 25, "y": 1, "z": 65},
-    "actions": ["dungeon:complete", "quest:shadow_book_ch1:complete_stage:enter_ruins"]
+    "dialog_id": "shadow_ruins_exit"
   },
   "fixed_time": 18000,
   "destructible": false,

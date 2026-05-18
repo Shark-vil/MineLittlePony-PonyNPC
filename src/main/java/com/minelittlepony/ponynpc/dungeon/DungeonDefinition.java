@@ -51,6 +51,8 @@ public class DungeonDefinition {
     public static class FinishMarkerConfig {
         public String name = "Exit";
         public IntVec3 offset = new IntVec3(25, 1, 65);
+        /** ID диалога, открываемого при клике по маркеру. Если задан — actions игнорируются. */
+        @SerializedName("dialog_id") public String dialogId = "";
         public java.util.List<String> actions = new java.util.ArrayList<>();
     }
 
