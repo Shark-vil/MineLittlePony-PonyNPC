@@ -15,7 +15,7 @@
         "radius": 5,
         "spawn_ghost_npc": {
           "dialog_id": "trixie_encounter_1",
-          "skin": "trixie",
+          "skin": "trixie_lulamoon",
           "name": "Великая и Могучая Трикси",
           "auto_dialog": true,
           "despawn_after_dialog": false,
