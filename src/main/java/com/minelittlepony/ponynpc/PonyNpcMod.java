@@ -15,6 +15,7 @@ import com.minelittlepony.ponynpc.quest.BlockZoneRegistry;
 import com.minelittlepony.ponynpc.quest.QuestManager;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
 import com.minelittlepony.ponynpc.registry.PonyNpcSounds;
+import com.minelittlepony.ponynpc.state.QuestStateStore;
 import com.minelittlepony.ponynpc.trigger.ProximityTriggerManager;
 
 import net.fabricmc.api.ModInitializer;
@@ -67,12 +68,25 @@ public class PonyNpcMod implements ModInitializer {
 
         // Загружаем диалоги, квесты, данжи и block_zones при старте сервера
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            QuestStateStore.getOrCreate(server); // регистрируем ссылку на сервер до любых обращений
             int dialogs    = DialogManager.getInstance().reload();
             int quests     = QuestManager.getInstance().reload();
             int dungeons   = DungeonRegistry.getInstance().reload();
             int blockZones = BlockZoneRegistry.getInstance().reload();
             LOGGER.info("PonyNPC: loaded {} dialog(s), {} quest(s), {} dungeon(s), {} block_zone(s)",
                 dialogs, quests, dungeons, blockZones);
+        });
+
+        // Сохраняем прогресс всех онлайн-игроков перед остановкой
+        ServerLifecycleEvents.SERVER_STOPPING.register(server ->
+            QuestStateStore.getInstance().onServerStopping()
+        );
+
+        // При входе игрока: загружаем квестовый прогресс и восстанавливаем proximity triggers
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            var player = handler.player;
+            QuestStateStore.getInstance().onPlayerJoin(player.getUuid());
+            QuestManager.getInstance().onPlayerJoin(player);
         });
 
         // Тик: proximity-триггеры + WAIT_DAYS завершение
@@ -84,9 +98,10 @@ public class PonyNpcMod implements ModInitializer {
             }
         });
 
-        // При отключении игрока — чистим ghost NPC, proximity-триггеры, пати, данж, block contexts
+        // При отключении игрока — сохраняем прогресс, чистим ghost NPC, триггеры, пати, данж
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var uuid = handler.player.getUuid();
+            QuestStateStore.getInstance().onPlayerLeave(uuid);
             GhostNpcManager.getInstance().despawnAll(uuid);
             ProximityTriggerManager.getInstance().clearForPlayer(uuid);
             PartyManager.getInstance().onPlayerDisconnect(uuid, server);

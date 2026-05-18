@@ -5,7 +5,6 @@ import com.minelittlepony.ponynpc.entity.QuestMarkerEntity;
 import com.minelittlepony.ponynpc.ghost.GhostNpcManager;
 import com.minelittlepony.ponynpc.quest.*;
 import com.minelittlepony.ponynpc.registry.PonyNpcEntities;
-import com.minelittlepony.ponynpc.state.PlayerQuestState;
 import com.minelittlepony.ponynpc.state.QuestStateStore;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.MinecraftServer;
@@ -21,17 +20,17 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * Проверяет proximity-триггеры квестов каждые 20 тиков.
+ * Управляет proximity-триггерами квестов.
  *
- * Три режима триггера:
- * - ghost_npc: спаунит пони-NPC для игрока (спавн + действия выполняются немедленно)
- * - spawn_marker: спаунит кликабельный QuestMarkerEntity (действия при клике)
- * - auto_complete: выполняет actions немедленно без сущности
+ * Вместо O(players × all_quests) каждый тик поддерживает индекс
+ * activeTriggers: только триггеры для текущих этапов каждого игрока.
+ * tick() = O(players × active_triggers_per_player) — обычно 0-2 на игрока.
  *
- * Логика повторного срабатывания:
- * - Триггер не срабатывает повторно пока spawned entity жив.
- * - Когда игрок покидает радиус, а entity уже нет → триггер сбрасывается.
- * - Следующий вход в радиус снова спаунит entity / выполняет actions.
+ * Жизненный цикл:
+ *  - registerTrigger() вызывается из QuestManager при старте/смене этапа
+ *  - unregisterForStage() вызывается при завершении этапа
+ *  - onPlayerJoin() перевосстанавливает триггеры при логине
+ *  - clearForPlayer() вызывается при дисконнекте
  */
 public final class ProximityTriggerManager {
 
@@ -39,14 +38,23 @@ public final class ProximityTriggerManager {
     private static final int CHECK_INTERVAL = 20;
     private static final ProximityTriggerManager INSTANCE = new ProximityTriggerManager();
 
+    // ── Индекс активных триггеров ─────────────────────────────────
+    // Только триггеры этапов, на которых игрок сейчас находится
+    private final Map<UUID, List<ActiveTrigger>> activeTriggers = new HashMap<>();
+
+    // ── Авто-старт квестов ────────────────────────────────────────
+    // Квесты, чей начальный этап имеет proximity_trigger (и квест ещё не начат)
+    // questId → config стартового этапа; строится при reload
+    private final Map<String, ProximityTriggerConfig> autoStartQuests = new LinkedHashMap<>();
+
+    // ── Состояние срабатываний ────────────────────────────────────
     // fireKey = playerUuid:questId:stageId
-    private final Set<String>          firedTriggers   = new HashSet<>();
-    private final Set<String>          playersInRange  = new HashSet<>();
-    // Entity spawned by a trigger (null if auto_complete or no entity configured)
-    private final Map<String, Entity>  triggerEntities = new HashMap<>();
-    // fireKey → persistUntilStage (stage id при котором ghost NPC должен быть удалён)
+    private final Set<String>          firedKeys        = new HashSet<>();
+    private final Set<String>          playersInRange   = new HashSet<>();
+    private final Map<String, Entity>  triggerEntities  = new HashMap<>();
+    // fireKey → persistUntilStage (для ghost NPC с persist_until_stage)
     private final Map<String, String>  triggerPersistUntil = new HashMap<>();
-    // persistKey = playerUuid:questId:persistUntilStageId → ghost NPC, переживший свой trigger stage
+    // persistKey = playerUuid:questId:persistUntilStageId → ghost NPC, переживший свой этап
     private final Map<String, Entity>  persistingGhosts = new HashMap<>();
 
     private int tickCounter = 0;
@@ -54,6 +62,70 @@ public final class ProximityTriggerManager {
     private ProximityTriggerManager() {}
 
     public static ProximityTriggerManager getInstance() { return INSTANCE; }
+
+    // ── Public API ────────────────────────────────────────────────
+
+    /**
+     * Регистрирует proximity trigger для указанного этапа игрока.
+     * Вызывается из QuestManager при starQuest / completeCurrentStage.
+     */
+    public void registerTrigger(UUID uuid, String questId, String stageId, ProximityTriggerConfig config) {
+        activeTriggers.computeIfAbsent(uuid, k -> new ArrayList<>())
+                      .add(new ActiveTrigger(questId, stageId, config));
+        LOGGER.debug("Registered trigger: player={} quest={} stage={}", uuid, questId, stageId);
+    }
+
+    /**
+     * Снимает регистрацию триггера при завершении этапа.
+     * Обрабатывает persist_until_stage: если задан — переносит entity в persistingGhosts.
+     */
+    public void unregisterForStage(UUID uuid, String questId, String stageId) {
+        List<ActiveTrigger> list = activeTriggers.get(uuid);
+        if (list != null) list.removeIf(t -> t.questId.equals(questId) && t.stageId.equals(stageId));
+
+        String fireKey = uuid + ":" + questId + ":" + stageId;
+        firedKeys.remove(fireKey);
+        playersInRange.remove(fireKey);
+
+        String persistUntilStage = triggerPersistUntil.remove(fireKey);
+        Entity entity = triggerEntities.remove(fireKey);
+
+        if (entity != null && !entity.isRemoved() && persistUntilStage != null) {
+            persistingGhosts.put(uuid + ":" + questId + ":" + persistUntilStage, entity);
+        } else if (entity != null && !entity.isRemoved()) {
+            entity.discard();
+        }
+    }
+
+    /**
+     * Задаёт список квестов с авто-стартом через proximity trigger.
+     * Вызывается из QuestManager.reload().
+     */
+    public void setAutoStartQuests(Map<String, ProximityTriggerConfig> quests) {
+        autoStartQuests.clear();
+        autoStartQuests.putAll(quests);
+    }
+
+    /**
+     * Перевосстанавливает active triggers при логине игрока.
+     * activeStages: questId → stageId (только активные, не завершённые квесты).
+     */
+    public void onPlayerJoin(UUID uuid, Map<String, String> activeStages) {
+        List<ActiveTrigger> list = activeTriggers.computeIfAbsent(uuid, k -> new ArrayList<>());
+        list.clear();
+
+        QuestManager qm = QuestManager.getInstance();
+        for (Map.Entry<String, String> entry : activeStages.entrySet()) {
+            qm.getQuest(entry.getKey())
+              .flatMap(def -> def.getStage(entry.getValue()))
+              .map(stage -> stage.proximityTrigger)
+              .filter(Objects::nonNull)
+              .ifPresent(config -> list.add(new ActiveTrigger(entry.getKey(), entry.getValue(), config)));
+        }
+        LOGGER.debug("Restored {} proximity trigger(s) for player {}", list.size(), uuid);
+    }
+
+    // ── Tick ──────────────────────────────────────────────────────
 
     public void tick(MinecraftServer server) {
         if (++tickCounter < CHECK_INTERVAL) return;
@@ -63,104 +135,66 @@ public final class ProximityTriggerManager {
         QuestStateStore store = QuestStateStore.getOrCreate(server);
 
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            UUID playerUuid = player.getUuid();
+            UUID uuid = player.getUuid();
 
-            for (String questId : qm.getQuestIds()) {
-                Optional<String> stageIdOpt = store.getCurrentStage(playerUuid, questId);
-                if (stageIdOpt.isEmpty()) continue;
-                String stageId = stageIdOpt.get();
-                if (stageId == null || stageId.equals(PlayerQuestState.COMPLETED)) continue;
-
-                qm.getQuest(questId).flatMap(def -> def.getStage(stageId)).ifPresent(stage -> {
-                    ProximityTriggerConfig trigger = stage.proximityTrigger;
-                    if (trigger == null) return;
-
-                    String fireKey = playerUuid + ":" + questId + ":" + stageId;
-                    boolean inRange = isPlayerInRange(player, server, trigger);
-
-                    if (inRange) {
-                        playersInRange.add(fireKey);
-
-                        if (firedTriggers.contains(fireKey)) {
-                            // Already fired — re-fire only if the spawned entity is gone
-                            Entity entity = triggerEntities.get(fireKey);
-                            if (entity != null && !entity.isRemoved()) return; // Entity still alive
-                            // Entity gone but player still in range → respawn
-                            firedTriggers.remove(fireKey);
-                            triggerEntities.remove(fireKey);
-                        }
-
-                        firedTriggers.add(fireKey);
-                        Entity spawned = fireTrigger(player, server, questId, stageId, trigger);
-                        triggerEntities.put(fireKey, spawned); // null for auto_complete
-                        if (spawned != null && trigger.spawnGhostNpc != null
-                                && trigger.spawnGhostNpc.persistUntilStage != null) {
-                            triggerPersistUntil.put(fireKey, trigger.spawnGhostNpc.persistUntilStage);
-                        }
-
-                    } else {
-                        // Player left the radius
-                        if (playersInRange.remove(fireKey)) {
-                            Entity entity = triggerEntities.get(fireKey);
-                            if (entity == null || entity.isRemoved()) {
-                                firedTriggers.remove(fireKey);
-                                triggerEntities.remove(fireKey);
-                            }
-                            // Ghost NPCs stay alive past radius edge; markers and auto reset immediately
-                        }
-                    }
-                });
+            // -- Активные триггеры текущего этапа: O(active_triggers_per_player) --
+            List<ActiveTrigger> triggers = activeTriggers.get(uuid);
+            if (triggers != null && !triggers.isEmpty()) {
+                for (ActiveTrigger trigger : List.copyOf(triggers)) {
+                    tickTrigger(player, server, trigger);
+                }
             }
 
-            // Auto-start quests whose start stage has a proximity trigger
-            for (String questId : qm.getQuestIds()) {
-                if (store.isStarted(playerUuid, questId)) continue;
-
-                qm.getQuest(questId).ifPresent(def -> {
-                    if (def.startStage == null) return;
-                    def.getStage(def.startStage).ifPresent(startStage -> {
-                        ProximityTriggerConfig trigger = startStage.proximityTrigger;
-                        if (trigger == null) return;
-
-                        String fireKey = playerUuid + ":" + questId + ":" + def.startStage;
-                        boolean inRange = isPlayerInRange(player, server, trigger);
-
-                        if (inRange) {
-                            playersInRange.add(fireKey);
-
-                            if (firedTriggers.contains(fireKey)) {
-                                Entity entity = triggerEntities.get(fireKey);
-                                if (entity != null && !entity.isRemoved()) return;
-                                firedTriggers.remove(fireKey);
-                                triggerEntities.remove(fireKey);
-                            }
-
-                            firedTriggers.add(fireKey);
-                            qm.startQuest(player, questId);
-                            Entity spawned = fireTrigger(player, server, questId, def.startStage, trigger);
-                            triggerEntities.put(fireKey, spawned);
-                            if (spawned != null && trigger.spawnGhostNpc != null
-                                    && trigger.spawnGhostNpc.persistUntilStage != null) {
-                                triggerPersistUntil.put(fireKey, trigger.spawnGhostNpc.persistUntilStage);
-                            }
-
-                        } else {
-                            if (playersInRange.remove(fireKey)) {
-                                Entity entity = triggerEntities.get(fireKey);
-                                if (entity == null || entity.isRemoved()) {
-                                    firedTriggers.remove(fireKey);
-                                    triggerEntities.remove(fireKey);
-                                }
-                            }
-                        }
-                    });
-                });
+            // -- Авто-старт квестов: O(auto_start_quests), обычно единицы --
+            for (Map.Entry<String, ProximityTriggerConfig> entry : autoStartQuests.entrySet()) {
+                String questId = entry.getKey();
+                if (store.isStarted(uuid, questId)) continue;
+                if (isPlayerInRange(player, server, entry.getValue())) {
+                    qm.startQuest(player, questId);
+                    // registerTrigger вызовется внутри startQuest если стартовый этап имеет trigger
+                }
             }
         }
 
-        cleanupFiredTriggers(server, store);
         cleanupPersistingGhosts(store);
     }
+
+    private void tickTrigger(ServerPlayerEntity player, MinecraftServer server, ActiveTrigger trigger) {
+        UUID uuid = player.getUuid();
+        String fireKey = uuid + ":" + trigger.questId + ":" + trigger.stageId;
+        boolean inRange = isPlayerInRange(player, server, trigger.config);
+
+        if (inRange) {
+            playersInRange.add(fireKey);
+
+            if (firedKeys.contains(fireKey)) {
+                Entity entity = triggerEntities.get(fireKey);
+                if (entity != null && !entity.isRemoved()) return; // ещё живёт
+                // Сущность исчезла — разрешаем повторный спавн
+                firedKeys.remove(fireKey);
+                triggerEntities.remove(fireKey);
+            }
+
+            firedKeys.add(fireKey);
+            Entity spawned = fireTrigger(player, server, trigger.questId, trigger.stageId, trigger.config);
+            triggerEntities.put(fireKey, spawned);
+
+            if (spawned != null && trigger.config.spawnGhostNpc != null
+                    && trigger.config.spawnGhostNpc.persistUntilStage != null) {
+                triggerPersistUntil.put(fireKey, trigger.config.spawnGhostNpc.persistUntilStage);
+            }
+        } else {
+            if (playersInRange.remove(fireKey)) {
+                Entity entity = triggerEntities.get(fireKey);
+                if (entity == null || entity.isRemoved()) {
+                    firedKeys.remove(fireKey);
+                    triggerEntities.remove(fireKey);
+                }
+            }
+        }
+    }
+
+    // ── Внутренние ────────────────────────────────────────────────
 
     private boolean isPlayerInRange(ServerPlayerEntity player, MinecraftServer server,
                                     ProximityTriggerConfig trigger) {
@@ -168,29 +202,16 @@ public final class ProximityTriggerManager {
         if (dimId == null) return false;
         RegistryKey<World> dimKey = RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, dimId);
         ServerWorld triggerWorld = server.getWorld(dimKey);
-        if (triggerWorld == null) return false;
-        if (!player.getWorld().equals(triggerWorld)) return false;
-
+        if (triggerWorld == null || !player.getWorld().equals(triggerWorld)) return false;
         Vec3d pos = player.getPos();
-        double dx = pos.x - trigger.x;
-        double dy = pos.y - trigger.y;
-        double dz = pos.z - trigger.z;
-        return (dx * dx + dy * dy + dz * dz) <= trigger.radius * trigger.radius;
+        double dx = pos.x - trigger.x, dy = pos.y - trigger.y, dz = pos.z - trigger.z;
+        return dx * dx + dy * dy + dz * dz <= trigger.radius * trigger.radius;
     }
 
-    /**
-     * Fires the trigger according to its mode and returns the spawned entity (or null).
-     * Modes:
-     *   auto_complete  → execute actions immediately, return null
-     *   spawn_marker   → spawn QuestMarkerEntity, return it
-     *   ghost_npc      → spawn ghost NPC + execute trigger.actions, return NPC
-     */
     private Entity fireTrigger(ServerPlayerEntity player, MinecraftServer server,
-                               String questId, String stageId,
-                               ProximityTriggerConfig trigger) {
-        LOGGER.info("Proximity trigger fired: quest='{}' stage='{}' player='{}' mode='{}'",
-            questId, stageId, player.getName().getString(),
-            trigger.autoComplete ? "auto_complete" : trigger.spawnMarker != null ? "spawn_marker" : "ghost_npc");
+                               String questId, String stageId, ProximityTriggerConfig trigger) {
+        LOGGER.info("Trigger fired: quest='{}' stage='{}' player='{}'",
+            questId, stageId, player.getName().getString());
 
         if (trigger.autoComplete) {
             QuestActionExecutor.executeAll(player, null, trigger.actions);
@@ -209,42 +230,13 @@ public final class ProximityTriggerManager {
             return null;
         }
 
-        // Ghost NPC mode
-        ServerWorld world = player.getServerWorld();
+        // Ghost NPC
         PonyNpcEntity spawned = null;
         if (trigger.spawnGhostNpc != null) {
-            spawned = GhostNpcManager.getInstance().spawnGhostNpc(player, world, trigger.spawnGhostNpc);
+            spawned = GhostNpcManager.getInstance().spawnGhostNpc(player, player.getServerWorld(), trigger.spawnGhostNpc);
         }
         QuestActionExecutor.executeAll(player, null, trigger.actions);
         return spawned;
-    }
-
-    private void cleanupFiredTriggers(MinecraftServer server, QuestStateStore store) {
-        firedTriggers.removeIf(key -> {
-            String[] parts = key.split(":", 3);
-            if (parts.length < 3) return true;
-            try {
-                UUID playerUuid = UUID.fromString(parts[0]);
-                String questId  = parts[1];
-                String stageId  = parts[2];
-                boolean expired = !store.isOnStage(playerUuid, questId, stageId);
-                if (expired) {
-                    Entity entity = triggerEntities.remove(key);
-                    String persistUntilStage = triggerPersistUntil.remove(key);
-                    if (entity != null && !entity.isRemoved() && persistUntilStage != null) {
-                        // Ghost NPC должен жить дольше — переносим в отдельный трекинг
-                        String persistKey = parts[0] + ":" + questId + ":" + persistUntilStage;
-                        persistingGhosts.put(persistKey, entity);
-                    } else if (entity != null && !entity.isRemoved()) {
-                        entity.discard();
-                    }
-                    playersInRange.remove(key);
-                }
-                return expired;
-            } catch (IllegalArgumentException e) {
-                return true;
-            }
-        });
     }
 
     private void cleanupPersistingGhosts(QuestStateStore store) {
@@ -252,20 +244,15 @@ public final class ProximityTriggerManager {
             String[] parts = entry.getKey().split(":", 3);
             if (parts.length < 3) { entry.getValue().discard(); return true; }
             try {
-                UUID playerUuid       = UUID.fromString(parts[0]);
-                String questId        = parts[1];
-                String persistUntilStage = parts[2];
-                Entity entity         = entry.getValue();
-
+                UUID uuid            = UUID.fromString(parts[0]);
+                String questId       = parts[1];
+                String untilStage    = parts[2];
+                Entity entity        = entry.getValue();
                 if (entity.isRemoved()) return true;
-
-                boolean shouldDespawn = store.isOnStage(playerUuid, questId, persistUntilStage)
-                        || store.isComplete(playerUuid, questId)
-                        || !store.isStarted(playerUuid, questId);
-                if (shouldDespawn) {
-                    entity.discard();
-                    return true;
-                }
+                boolean despawn = store.isOnStage(uuid, questId, untilStage)
+                        || store.isComplete(uuid, questId)
+                        || !store.isStarted(uuid, questId);
+                if (despawn) { entity.discard(); return true; }
                 return false;
             } catch (IllegalArgumentException e) {
                 entry.getValue().discard();
@@ -274,20 +261,14 @@ public final class ProximityTriggerManager {
         });
     }
 
-    /** Сбрасывает все proximity-триггеры конкретного квеста для игрока. */
-    public void clearForQuest(UUID playerUuid, String questId) {
-        String prefix = playerUuid + ":" + questId + ":";
-        List<String> toRemove = new ArrayList<>();
-        for (String k : firedTriggers) {
-            if (k.startsWith(prefix)) toRemove.add(k);
-        }
-        for (String k : toRemove) {
-            firedTriggers.remove(k);
-            triggerPersistUntil.remove(k);
-            Entity entity = triggerEntities.remove(k);
-            if (entity != null && !entity.isRemoved()) entity.discard();
-            playersInRange.remove(k);
-        }
+    // ── Очистка ───────────────────────────────────────────────────
+
+    public void clearForQuest(UUID uuid, String questId) {
+        List<ActiveTrigger> list = activeTriggers.get(uuid);
+        if (list != null) list.removeIf(t -> t.questId.equals(questId));
+
+        String prefix = uuid + ":" + questId + ":";
+        discardAndRemove(prefix);
         persistingGhosts.entrySet().removeIf(e -> {
             if (!e.getKey().startsWith(prefix)) return false;
             if (!e.getValue().isRemoved()) e.getValue().discard();
@@ -295,23 +276,39 @@ public final class ProximityTriggerManager {
         });
     }
 
-    public void clearForPlayer(UUID playerUuid) {
-        String prefix = playerUuid + ":";
-        List<String> toRemove = new ArrayList<>();
-        for (String k : firedTriggers) {
-            if (k.startsWith(prefix)) toRemove.add(k);
-        }
-        for (String k : toRemove) {
-            firedTriggers.remove(k);
-            triggerPersistUntil.remove(k);
-            Entity entity = triggerEntities.remove(k);
-            if (entity != null && !entity.isRemoved()) entity.discard();
-            playersInRange.remove(k);
-        }
+    public void clearForPlayer(UUID uuid) {
+        activeTriggers.remove(uuid);
+        String prefix = uuid + ":";
+        discardAndRemove(prefix);
         persistingGhosts.entrySet().removeIf(e -> {
             if (!e.getKey().startsWith(prefix)) return false;
             if (!e.getValue().isRemoved()) e.getValue().discard();
             return true;
         });
+    }
+
+    private void discardAndRemove(String prefix) {
+        for (String key : List.copyOf(firedKeys)) {
+            if (!key.startsWith(prefix)) continue;
+            firedKeys.remove(key);
+            triggerPersistUntil.remove(key);
+            Entity e = triggerEntities.remove(key);
+            if (e != null && !e.isRemoved()) e.discard();
+            playersInRange.remove(key);
+        }
+    }
+
+    // ── Inner class ───────────────────────────────────────────────
+
+    private static final class ActiveTrigger {
+        final String questId;
+        final String stageId;
+        final ProximityTriggerConfig config;
+
+        ActiveTrigger(String questId, String stageId, ProximityTriggerConfig config) {
+            this.questId = questId;
+            this.stageId = stageId;
+            this.config  = config;
+        }
     }
 }

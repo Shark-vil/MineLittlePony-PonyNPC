@@ -147,8 +147,9 @@ public final class PonyNpcCommand {
 
             // ── Reload (dialogs + quests + dungeons) ─────────────
             .then(literal("reload").executes(ctx -> {
+                var server = ctx.getSource().getServer();
                 int d = DialogManager.getInstance().reload();
-                int q = QuestManager.getInstance().reload();
+                int q = QuestManager.getInstance().reload(server);
                 int u = DungeonRegistry.getInstance().reload();
                 int b = com.minelittlepony.ponynpc.quest.BlockZoneRegistry.getInstance().reload();
                 ctx.getSource().sendFeedback(
@@ -548,12 +549,12 @@ public final class PonyNpcCommand {
                 return 0;
             }
 
-            Path questFile = FabricLoader.getInstance().getConfigDir()
-                .resolve("ponynpc").resolve("quests").resolve(questId + ".json");
-            if (!Files.exists(questFile)) {
-                ctx.getSource().sendError(Text.literal("[PonyNPC] Quest file not found: " + questFile));
+            Optional<Path> questFileOpt = QuestManager.getInstance().getQuestFilePath(questId);
+            if (questFileOpt.isEmpty()) {
+                ctx.getSource().sendError(Text.literal("[PonyNPC] Quest file not tracked for: " + questId));
                 return 0;
             }
+            Path questFile = questFileOpt.get();
 
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             JsonObject root;
@@ -586,7 +587,7 @@ public final class PonyNpcCommand {
             stage.add("proximity_trigger", trigger);
             Files.writeString(questFile, gson.toJson(root));
 
-            QuestManager.getInstance().reload();
+            QuestManager.getInstance().reload(ctx.getSource().getServer());
 
             double fx = x, fy = y, fz = z;
             ctx.getSource().sendFeedback(() -> Text.literal(

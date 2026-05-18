@@ -61,8 +61,8 @@ public final class NetworkHandler {
 
         List<QuestJournalPayload.QuestEntry> result = new ArrayList<>();
 
-        for (String questId : qm.getQuestIds()) {
-            if (!store.isStarted(uuid, questId)) continue;
+        // Итерируем только квесты, которые игрок начал — O(started_quests) вместо O(all_quests)
+        for (String questId : store.getStartedQuestIds(uuid)) {
 
             Optional<QuestDefinition> defOpt = qm.getQuest(questId);
             if (defOpt.isEmpty()) continue;
