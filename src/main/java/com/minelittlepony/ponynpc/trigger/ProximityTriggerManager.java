@@ -78,9 +78,12 @@ public final class ProximityTriggerManager {
                         playersInRange.add(fireKey);
 
                         if (firedTriggers.contains(fireKey)) {
+                            // Already fired — re-fire only if the spawned entity is gone
                             Entity entity = triggerEntities.get(fireKey);
                             if (entity != null && !entity.isRemoved()) return; // Entity still alive
-                            return; // Entity consumed — wait until player leaves radius before re-firing
+                            // Entity gone but player still in range → respawn
+                            firedTriggers.remove(fireKey);
+                            triggerEntities.remove(fireKey);
                         }
 
                         firedTriggers.add(fireKey);
@@ -88,12 +91,14 @@ public final class ProximityTriggerManager {
                         triggerEntities.put(fireKey, spawned); // null for auto_complete
 
                     } else {
-                        // Player left the radius — always reset so next visit fires fresh
+                        // Player left the radius
                         if (playersInRange.remove(fireKey)) {
                             Entity entity = triggerEntities.get(fireKey);
-                            if (entity != null && !entity.isRemoved()) entity.discard();
-                            firedTriggers.remove(fireKey);
-                            triggerEntities.remove(fireKey);
+                            if (entity == null || entity.isRemoved()) {
+                                firedTriggers.remove(fireKey);
+                                triggerEntities.remove(fireKey);
+                            }
+                            // Ghost NPCs stay alive past radius edge; markers and auto reset immediately
                         }
                     }
                 });
@@ -118,7 +123,8 @@ public final class ProximityTriggerManager {
                             if (firedTriggers.contains(fireKey)) {
                                 Entity entity = triggerEntities.get(fireKey);
                                 if (entity != null && !entity.isRemoved()) return;
-                                return; // Consumed — wait for player to leave
+                                firedTriggers.remove(fireKey);
+                                triggerEntities.remove(fireKey);
                             }
 
                             firedTriggers.add(fireKey);
@@ -129,9 +135,10 @@ public final class ProximityTriggerManager {
                         } else {
                             if (playersInRange.remove(fireKey)) {
                                 Entity entity = triggerEntities.get(fireKey);
-                                if (entity != null && !entity.isRemoved()) entity.discard();
-                                firedTriggers.remove(fireKey);
-                                triggerEntities.remove(fireKey);
+                                if (entity == null || entity.isRemoved()) {
+                                    firedTriggers.remove(fireKey);
+                                    triggerEntities.remove(fireKey);
+                                }
                             }
                         }
                     });
