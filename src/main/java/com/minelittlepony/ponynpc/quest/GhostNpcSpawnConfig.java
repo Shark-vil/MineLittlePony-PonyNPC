@@ -14,4 +14,10 @@ public class GhostNpcSpawnConfig {
     @SerializedName("auto_dialog") public boolean autoDialog = true;
     /** Удалить ghost NPC как только диалог закрывается. */
     @SerializedName("despawn_after_dialog") public boolean despawnAfterDialog = true;
+    /**
+     * Если задан — ghost NPC живёт до тех пор, пока игрок не достигнет этого этапа квеста.
+     * При переходе на указанный этап (или завершении/сбросе квеста) NPC удаляется.
+     * Используется вместе с despawn_after_dialog=false.
+     */
+    @SerializedName("persist_until_stage") public String persistUntilStage = null;
 }

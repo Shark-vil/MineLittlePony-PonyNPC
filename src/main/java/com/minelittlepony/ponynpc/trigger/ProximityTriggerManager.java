@@ -44,6 +44,10 @@ public final class ProximityTriggerManager {
     private final Set<String>          playersInRange  = new HashSet<>();
     // Entity spawned by a trigger (null if auto_complete or no entity configured)
     private final Map<String, Entity>  triggerEntities = new HashMap<>();
+    // fireKey → persistUntilStage (stage id при котором ghost NPC должен быть удалён)
+    private final Map<String, String>  triggerPersistUntil = new HashMap<>();
+    // persistKey = playerUuid:questId:persistUntilStageId → ghost NPC, переживший свой trigger stage
+    private final Map<String, Entity>  persistingGhosts = new HashMap<>();
 
     private int tickCounter = 0;
 
@@ -89,6 +93,10 @@ public final class ProximityTriggerManager {
                         firedTriggers.add(fireKey);
                         Entity spawned = fireTrigger(player, server, questId, stageId, trigger);
                         triggerEntities.put(fireKey, spawned); // null for auto_complete
+                        if (spawned != null && trigger.spawnGhostNpc != null
+                                && trigger.spawnGhostNpc.persistUntilStage != null) {
+                            triggerPersistUntil.put(fireKey, trigger.spawnGhostNpc.persistUntilStage);
+                        }
 
                     } else {
                         // Player left the radius
@@ -131,6 +139,10 @@ public final class ProximityTriggerManager {
                             qm.startQuest(player, questId);
                             Entity spawned = fireTrigger(player, server, questId, def.startStage, trigger);
                             triggerEntities.put(fireKey, spawned);
+                            if (spawned != null && trigger.spawnGhostNpc != null
+                                    && trigger.spawnGhostNpc.persistUntilStage != null) {
+                                triggerPersistUntil.put(fireKey, trigger.spawnGhostNpc.persistUntilStage);
+                            }
 
                         } else {
                             if (playersInRange.remove(fireKey)) {
@@ -147,6 +159,7 @@ public final class ProximityTriggerManager {
         }
 
         cleanupFiredTriggers(server, store);
+        cleanupPersistingGhosts(store);
     }
 
     private boolean isPlayerInRange(ServerPlayerEntity player, MinecraftServer server,
@@ -217,11 +230,45 @@ public final class ProximityTriggerManager {
                 boolean expired = !store.isOnStage(playerUuid, questId, stageId);
                 if (expired) {
                     Entity entity = triggerEntities.remove(key);
-                    if (entity != null && !entity.isRemoved()) entity.discard();
+                    String persistUntilStage = triggerPersistUntil.remove(key);
+                    if (entity != null && !entity.isRemoved() && persistUntilStage != null) {
+                        // Ghost NPC должен жить дольше — переносим в отдельный трекинг
+                        String persistKey = parts[0] + ":" + questId + ":" + persistUntilStage;
+                        persistingGhosts.put(persistKey, entity);
+                    } else if (entity != null && !entity.isRemoved()) {
+                        entity.discard();
+                    }
                     playersInRange.remove(key);
                 }
                 return expired;
             } catch (IllegalArgumentException e) {
+                return true;
+            }
+        });
+    }
+
+    private void cleanupPersistingGhosts(QuestStateStore store) {
+        persistingGhosts.entrySet().removeIf(entry -> {
+            String[] parts = entry.getKey().split(":", 3);
+            if (parts.length < 3) { entry.getValue().discard(); return true; }
+            try {
+                UUID playerUuid       = UUID.fromString(parts[0]);
+                String questId        = parts[1];
+                String persistUntilStage = parts[2];
+                Entity entity         = entry.getValue();
+
+                if (entity.isRemoved()) return true;
+
+                boolean shouldDespawn = store.isOnStage(playerUuid, questId, persistUntilStage)
+                        || store.isComplete(playerUuid, questId)
+                        || !store.isStarted(playerUuid, questId);
+                if (shouldDespawn) {
+                    entity.discard();
+                    return true;
+                }
+                return false;
+            } catch (IllegalArgumentException e) {
+                entry.getValue().discard();
                 return true;
             }
         });
@@ -236,10 +283,16 @@ public final class ProximityTriggerManager {
         }
         for (String k : toRemove) {
             firedTriggers.remove(k);
+            triggerPersistUntil.remove(k);
             Entity entity = triggerEntities.remove(k);
             if (entity != null && !entity.isRemoved()) entity.discard();
             playersInRange.remove(k);
         }
+        persistingGhosts.entrySet().removeIf(e -> {
+            if (!e.getKey().startsWith(prefix)) return false;
+            if (!e.getValue().isRemoved()) e.getValue().discard();
+            return true;
+        });
     }
 
     public void clearForPlayer(UUID playerUuid) {
@@ -250,9 +303,15 @@ public final class ProximityTriggerManager {
         }
         for (String k : toRemove) {
             firedTriggers.remove(k);
+            triggerPersistUntil.remove(k);
             Entity entity = triggerEntities.remove(k);
             if (entity != null && !entity.isRemoved()) entity.discard();
             playersInRange.remove(k);
         }
+        persistingGhosts.entrySet().removeIf(e -> {
+            if (!e.getKey().startsWith(prefix)) return false;
+            if (!e.getValue().isRemoved()) e.getValue().discard();
+            return true;
+        });
     }
 }
