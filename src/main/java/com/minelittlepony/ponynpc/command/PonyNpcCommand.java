@@ -377,14 +377,19 @@ public final class PonyNpcCommand {
             Box box = player.getBoundingBox().stretch(dir.multiply(dist)).expand(1.0);
 
             EntityHitResult hit = ProjectileUtil.raycast(
-                player, start, end, box, e -> e instanceof PonyNpcEntity, dist * dist);
+                player, start, end, box,
+                e -> e instanceof PonyNpcEntity || (e instanceof QuestMarkerEntity m && m.isPermanent()),
+                dist * dist);
 
-            if (hit != null && hit.getEntity() instanceof PonyNpcEntity npc) {
-                npc.discard();
-                ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] NPC removed"), true);
-                return 1;
+            if (hit != null) {
+                Entity target = hit.getEntity();
+                if (target instanceof PonyNpcEntity || target instanceof QuestMarkerEntity) {
+                    target.discard();
+                    ctx.getSource().sendFeedback(() -> Text.literal("[PonyNPC] Removed"), true);
+                    return 1;
+                }
             }
-            ctx.getSource().sendError(Text.literal("[PonyNPC] Look at a Pony NPC to remove it"));
+            ctx.getSource().sendError(Text.literal("[PonyNPC] Look at a Pony NPC or marker to remove it"));
             return 0;
         } catch (Exception e) {
             ctx.getSource().sendError(Text.literal("[PonyNPC] " + e.getMessage()));
