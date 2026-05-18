@@ -324,7 +324,10 @@ public final class NetworkHandler {
         if (entity instanceof PonyNpcEntity ponyNpc) {
             GhostNpcManager.getInstance().onDialogClosed(player.getUuid(), ponyNpc);
         } else if (entity instanceof QuestMarkerEntity marker) {
-            if (!marker.isRemoved() && !marker.isPermanent()) marker.discard();
+            // Only discard actions-based markers; dialog-based markers (e.g. dungeon finish) stay for re-interaction
+            if (!marker.isRemoved() && !marker.isPermanent() && marker.getDialogId().isEmpty()) {
+                marker.discard();
+            }
         } else if (entity instanceof VirtualDialogContext ctx) {
             BlockInteractionManager.getInstance().removeContext(player.getUuid(), ctx.getDialogSourceUuid());
         }
