@@ -16,13 +16,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * Таргет — inner class ThreadedAnvilChunkStorage$EntityTracker.
  */
-@Mixin(targets = "net.minecraft.server.world.ThreadedAnvilChunkStorage$EntityTracker")
+@Mixin(targets = "net.minecraft.server.world.ServerChunkLoadingManager$EntityTracker")
 public abstract class EntityTrackerMixin {
 
     @Shadow @Final Entity entity;
 
     @Inject(
-        method = "startTracking(Lnet/minecraft/server/network/ServerPlayerEntity;)V",
+        method = "updateTrackedStatus(Lnet/minecraft/server/network/ServerPlayerEntity;)V",
         at = @At("HEAD"),
         cancellable = true
     )

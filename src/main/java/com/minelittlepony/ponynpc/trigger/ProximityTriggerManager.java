@@ -137,21 +137,21 @@ public final class ProximityTriggerManager {
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             UUID uuid = player.getUuid();
 
-            // -- Активные триггеры текущего этапа: O(active_triggers_per_player) --
-            List<ActiveTrigger> triggers = activeTriggers.get(uuid);
-            if (triggers != null && !triggers.isEmpty()) {
-                for (ActiveTrigger trigger : List.copyOf(triggers)) {
-                    tickTrigger(player, server, trigger);
-                }
-            }
-
-            // -- Авто-старт квестов: O(auto_start_quests), обычно единицы --
+            // -- Авто-старт квестов сначала — registerTrigger вызывается внутри startQuest,
+            //    чтобы следующий блок мог сразу же его сработать в этом же тике --
             for (Map.Entry<String, ProximityTriggerConfig> entry : autoStartQuests.entrySet()) {
                 String questId = entry.getKey();
                 if (store.isStarted(uuid, questId)) continue;
                 if (isPlayerInRange(player, server, entry.getValue())) {
                     qm.startQuest(player, questId);
-                    // registerTrigger вызовется внутри startQuest если стартовый этап имеет trigger
+                }
+            }
+
+            // -- Активные триггеры текущего этапа: O(active_triggers_per_player) --
+            List<ActiveTrigger> triggers = activeTriggers.get(uuid);
+            if (triggers != null && !triggers.isEmpty()) {
+                for (ActiveTrigger trigger : List.copyOf(triggers)) {
+                    tickTrigger(player, server, trigger);
                 }
             }
         }
