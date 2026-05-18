@@ -59,6 +59,22 @@ PonyNpcEntity создаётся с visibleToPlayers = {playerUUID}
 | `name` | Отображаемое имя над NPC |
 | `auto_dialog` | Открыть диалог сразу после спауна |
 | `despawn_after_dialog` | Удалить NPC когда диалог закрывается |
+| `persist_until_stage` | Ghost NPC живёт до тех пор, пока игрок не достигнет указанного этапа квеста. Используется вместе с `despawn_after_dialog: false`. |
+
+### Пример с persist_until_stage
+
+```json
+"spawn_ghost_npc": {
+  "dialog_id": "trixie_encounter_1",
+  "skin": "trixie",
+  "name": "Трикси",
+  "auto_dialog": true,
+  "despawn_after_dialog": false,
+  "persist_until_stage": "find_twilight"
+}
+```
+
+Ghost NPC спаунится на стадии `talk_to_trixie`, остаётся видимым весь этап `talk_to_librarian` и исчезает как только игрок переходит на `find_twilight`.
 
 ---
 
